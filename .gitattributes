@@ -1,0 +1,23 @@
+# Auto line endings
+* text=auto
+
+# Python
+*.py text eol=lf
+*.pyw text eol=lf
+
+# Shell
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Batch
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.exe binary
+
+# Data
+*.xlsx binary
+*.xls binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
