@@ -38,6 +38,8 @@ outputs/*.xls
 .env
 .env.local
 .env.*.local
+*.log
+__pycache__/
 
 # OS
 Thumbs.db

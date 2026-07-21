@@ -769,7 +769,7 @@ async function procesar() {
   formData.append('banco', document.getElementById('banco').value);
 
   try {
-    const resp = await fetch('/procesar', { method: 'POST', body: formData });
+    const resp = await fetch('procesar', { method: 'POST', body: formData });
     const data = await resp.json();
 
     document.getElementById('progress').style.display = 'none';
@@ -790,6 +790,7 @@ async function procesar() {
 // ── MOSTRAR RESULTADO ──
 function mostrarResultado(data) {
   nombreExcelActual = data.archivo;
+  const info = data.info || {};
 
   document.getElementById('empty-card').style.display = 'none';
   const res = document.getElementById('resultado');
@@ -801,8 +802,8 @@ function mostrarResultado(data) {
   document.getElementById('alerta-resultado').innerHTML = `
     <div class="alert alert-ok" style="margin-bottom:16px">
       ✅ <span><strong>${data.total} movimientos</strong> extraídos ·
-      banco: <strong>${data.info.banco}</strong> ·
-      ${data.info.paginas} páginas · método: <strong>${data.info.metodo}</strong></span>
+      banco: <strong>${info.banco}</strong> ·
+      ${info.paginas} páginas · método: <strong>${info.metodo}</strong></span>
     </div>`;
 
   // Stats
@@ -816,15 +817,15 @@ function mostrarResultado(data) {
       <div class="stat-lbl">Movimientos</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-val">${data.info.paginas}</div>
+      <div class="stat-val">${info.paginas}</div>
       <div class="stat-lbl">Páginas</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-val" style="font-size:14px">${data.info.banco}</div>
+      <div class="stat-val" style="font-size:14px">${info.banco}</div>
       <div class="stat-lbl">Banco</div>
     </div>
     <div class="stat-cell">
-      <div class="stat-val" style="font-size:14px">${data.info.metodo}</div>
+      <div class="stat-val" style="font-size:14px">${info.metodo}</div>
       <div class="stat-lbl">Método</div>
     </div>`;
 
@@ -879,7 +880,7 @@ function mostrarError(msg, textoMuestra) {
 }
 
 async function descargar() {
-  if (nombreExcelActual) window.location.href = '/descargar/' + nombreExcelActual;
+  if (nombreExcelActual) window.location.href = 'descargar/' + nombreExcelActual;
 }
 
 async function mostrarDebug() {
@@ -889,7 +890,7 @@ async function mostrarDebug() {
 
   const formData = new FormData();
   formData.append('archivo', archivoActual);
-  const resp = await fetch('/preview_texto', { method: 'POST', body: formData });
+  const resp = await fetch('preview_texto', { method: 'POST', body: formData });
   const data = await resp.json();
   document.getElementById('debug-area').textContent = data.texto || data.error;
   document.getElementById('debug-card').scrollIntoView({ behavior: 'smooth' });

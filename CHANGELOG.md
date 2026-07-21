@@ -2,6 +2,28 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.1.0] - 2026-07-21
+
+### Agregado
+- ✨ **Parser dedicado Santander** — Extrae comprobantes, soporte USD, sección pesos/dólares
+- ✨ **Parser dedicado Nación** — Clasifica débito/crédito por prefijo (CR/DEBIN/GRAVAMEN)
+- ✨ **Columna `titular`** — Identifica el cliente titular de cada PDF (multi-tenant)
+- ✨ **Columna `importe` unificada** — Una sola columna: positivo = crédito, negativo = débito
+- ✨ **Columna `moneda`** — ARS o USD para cada movimiento
+- ✨ **Formato homogéneo** — Mismas 8 columnas para todos los bancos
+- ✨ **Extracción de comprobantes** — Número de comprobante/operación en columna `referencia`
+
+### Corregido
+- 🐛 Detección de banco Nación — keyword `rio` matcheaba dentro de `periodo`
+- 🐛 Frontend `index.html` — URLs relativas para funcionar detrás de Tailscale Funnel
+
+### Cambiado
+- 🔄 Columna `importe` reemplaza a `debito`/`credito` separados
+- 🔄 Orden de columnas Excel: `fecha | descripcion | referencia | importe | saldo | moneda | tipo | titular`
+- 🔄 Resumen Excel incluye titular y suma de débitos/créditos
+
+---
+
 ## [1.0.0] - 2024-07-20
 
 ### Agregado

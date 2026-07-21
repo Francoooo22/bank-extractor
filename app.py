@@ -186,7 +186,7 @@ def guardar_excel(resultado, ruta):
         df = pd.DataFrame(movs)
 
         # Orden de columnas preferido
-        cols_preferidas = ['fecha', 'descripcion', 'referencia', 'debito', 'credito', 'saldo', 'tipo', 'raw']
+        cols_preferidas = ['fecha', 'descripcion', 'referencia', 'importe', 'saldo', 'moneda', 'tipo', 'titular', 'raw']
         cols_existentes = [c for c in cols_preferidas if c in df.columns]
         otras = [c for c in df.columns if c not in cols_preferidas]
         df = df[cols_existentes + otras]
@@ -194,15 +194,19 @@ def guardar_excel(resultado, ruta):
         df.to_excel(writer, sheet_name='Movimientos', index=False)
 
         # Hoja de resumen
+        importes = [float(m.get('importe') or 0) for m in movs]
+        total_debitos = sum(i for i in importes if i < 0)
+        total_creditos = sum(i for i in importes if i > 0)
         resumen_data = {
-            'Campo': ['Banco detectado', 'Total movimientos', 'Fecha extracción',
+            'Campo': ['Banco detectado', 'Titular', 'Total movimientos', 'Fecha extracción',
                       'Débitos (suma)', 'Créditos (suma)'],
             'Valor': [
                 info.get('banco', 'Desconocido'),
+                info.get('titular', ''),
                 len(movs),
                 datetime.now().strftime('%d/%m/%Y %H:%M'),
-                sum(float(m.get('debito') or 0) for m in movs),
-                sum(float(m.get('credito') or 0) for m in movs),
+                total_debitos,
+                total_creditos,
             ]
         }
         pd.DataFrame(resumen_data).to_excel(writer, sheet_name='Resumen', index=False)
@@ -220,4 +224,4 @@ if __name__ == '__main__':
     print("  Abrí http://localhost:5000 en tu navegador")
     print("=" * 50)
     logger.info("🚀 Flask server iniciando en puerto 5000...")
-    app.run(debug=True, port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5001)
