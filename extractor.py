@@ -1,8 +1,9 @@
 """
 Motor de extracción de resúmenes bancarios
-Soporta: Galicia, Santander, BBVA, Macro, HSBC, Banco Nación, Genérico
+Soporta: Galicia, Santander, BBVA, Macro, HSBC, Banco Nación, ICBC, Genérico
 """
 
+import os
 import re
 import pdfplumber
 from datetime import datetime
@@ -51,6 +52,7 @@ PATRONES = {
         ),
         'fecha_fmt': '%d/%m/%Y',
     },
+    'icbc': None,  # Parser dedicado: extraer_icbc()
     'generico': None,  # Usa detección automática
 }
 
@@ -96,6 +98,10 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
     if not movimientos and banco_detectado == 'nacion':
         movimientos = extraer_nacion(texto_completo)
 
+    # Parser dedicado para ICBC
+    if not movimientos and banco_detectado == 'icbc':
+        movimientos = extraer_icbc(texto_completo)
+
     # Si no hubo éxito con tablas, usar regex sobre texto
     if not movimientos:
         movimientos = extraer_de_texto(texto_completo, banco_detectado)
@@ -104,10 +110,12 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
     if not movimientos:
         movimientos = extraccion_generica(texto_completo)
 
-    # Agregar titular y unificar importe
+    # Agregar titular, documento de origen y unificar importe
+    nombre_documento = os.path.splitext(os.path.basename(ruta_pdf))[0]
     for mov in movimientos:
         if titular:
             mov['titular'] = titular
+        mov['documento'] = nombre_documento
         debito = mov.pop('debito', None)
         credito = mov.pop('credito', None)
         if debito is not None:
@@ -143,7 +151,10 @@ def detectar_banco(texto: str) -> str:
         'macro': ['banco macro', 'macro'],
         'nacion': ['banco de la nacion', 'bna', 'nacion'],
         'hsbc': ['hsbc'],
-        'icbc': ['icbc'],
+        # El PDF de ICBC nunca imprime la sigla "ICBC": dice el nombre
+        # completo, y a veces pdfplumber lo extrae sin espacios
+        # ("industrialandcommercialbankofchina") por el espaciado del PDF.
+        'icbc': ['icbc', 'bankofchina', 'bank of china', '30-70944784-6'],
         'ciudad': ['banco ciudad'],
         'provincia': ['banco provincia', 'bapro'],
         'supervielle': ['supervielle'],
@@ -459,19 +470,23 @@ def extraer_nacion(texto):
     Parser dedicado para resúmenes Banco Nación.
     Formato: [____] DD/MM/YY DESCRIPCION COMPROBANTE MONTO SALDO
 
-    Clasificación débito/crédito por prefijo de descripción:
-    - CR ... = crédito
-    - DEBIN, DEB, GRAVAMEN, REG.REC.SIRCREB, COMIS., I.V.A., RETEN., CAM.FED = débito
-    - TRANSF. INTERBANCARIAS = débito
+    Clasificación débito/crédito: se deriva del propio saldo informado por
+    el banco (saldo_actual = saldo_anterior ± monto), no del texto de la
+    descripción. Un mismo tipo de movimiento (p.ej. "DEBIN <cuit>") puede
+    ser débito o crédito según de quién sea el CUIT asociado, así que
+    adivinar por prefijo de texto clasifica mal una porción grande de
+    movimientos (todo lo que aparece bajo el propio CUIT del titular).
+    Si no se puede resolver por saldo (falta saldo anterior o hay
+    ambigüedad), se usa como respaldo la clasificación por prefijo.
     """
     movimientos = []
     lineas = texto.split('\n')
 
-    pat_num = re.compile(r'(\d{1,3}(?:\.\d{3})*,\d{2})')
-    pat_num_entero = re.compile(r'(\d{4,})')
+    pat_num = re.compile(r'(\d{1,3}(?:\.\d{3})*,\d{2}-?)')
     pat_fecha = re.compile(r'^(\d{2}/\d{2}/\d{2})\s')
+    pat_saldo_anterior = re.compile(r'SALDO\s+ANTERIOR\s+([\d.,]+-?)', re.IGNORECASE)
 
-    # Prefijos de crédito (todo lo demás es débito)
+    # Prefijos de crédito, usados solo como respaldo cuando no hay saldo para comparar
     prefijos_credito = re.compile(
         r'^CR\s|'
         r'^LIQ\s|'
@@ -480,14 +495,21 @@ def extraer_nacion(texto):
         r'^DEP\.'
     , re.IGNORECASE)
 
-    # Líneas a saltar
+    # Líneas a saltar (encabezados/pie de página).
+    # Nota: NO incluye "banco" ni "nacion": esas palabras aparecen también en
+    # movimientos reales ("48HS. BANCOS", "COMIS. CANJE O/BANCOS") y los
+    # descartaba por error. El propio requisito de fecha al inicio de línea
+    # ya filtra el encabezado "BANCO DE LA NACION ARGENTINA".
     saltar_re = re.compile(
         r'transporte|saldo\s+anterior|fecha|movimientos|'
         r'comprob|debitos|creditos|saldo\s*$|'
-        r'hoja:|cuit|sucursal|banco|nacion|cuenta|'
+        r'hoja:|cuit|sucursal|cuenta|'
         r'resumen|cbu|clave|suc:|iva|'
         r'pagina|siguiente|clav', re.IGNORECASE
     )
+
+    EPS = 0.01
+    saldo_prev = None
 
     for linea in lineas:
         linea = linea.strip()
@@ -495,6 +517,13 @@ def extraer_nacion(texto):
             continue
 
         linea_lower = linea.lower()
+
+        # Actualizar saldo de referencia cuando el resumen declara uno nuevo
+        # (inicio del resumen, o inicio de una nueva cuenta dentro del PDF)
+        m_saldo_ant = pat_saldo_anterior.search(linea)
+        if m_saldo_ant:
+            saldo_prev = limpiar_monto(m_saldo_ant.group(1))
+            continue
 
         # Saltar líneas de ruido
         if saltar_re.search(linea_lower):
@@ -554,8 +583,23 @@ def extraer_nacion(texto):
         if monto is None:
             continue
 
-        # Clasificar débito/crédito por prefijo
-        es_credito = bool(prefijos_credito.match(desc_limpia))
+        # Clasificar débito/crédito comparando contra el delta real de saldo
+        es_credito = None
+        if saldo_prev is not None and saldo is not None:
+            delta = round(saldo - saldo_prev, 2)
+            coincide_credito = abs(delta - monto) < EPS
+            coincide_debito = abs(delta + monto) < EPS
+            if coincide_credito and not coincide_debito:
+                es_credito = True
+            elif coincide_debito and not coincide_credito:
+                es_credito = False
+
+        if es_credito is None:
+            # Respaldo: sin saldo previo confiable, clasificar por prefijo
+            es_credito = bool(prefijos_credito.match(desc_limpia))
+
+        if saldo is not None:
+            saldo_prev = saldo
 
         movimientos.append({
             'fecha': normalizar_fecha(fecha),
@@ -566,6 +610,131 @@ def extraer_nacion(texto):
             'saldo': saldo,
             'moneda': 'ARS',
             'tipo': 'C' if es_credito else 'D',
+        })
+
+    return movimientos
+
+
+# ─────────────────────────────────────────────
+#  EXTRACCIÓN ICBC (DEDICADA)
+# ─────────────────────────────────────────────
+
+def extraer_icbc(texto):
+    """
+    Parser dedicado para resúmenes ICBC (Industrial and Commercial Bank of China).
+    Formato: DD-MM CONCEPTO [COMPROBANTE] [ORIGEN] [CANAL] MONTO[-] [SALDO[-]]
+
+    A diferencia de Banco Nación, acá el importe ya viene con signo explícito
+    en el propio número (termina en "-" = débito, sin "-" = crédito), así que
+    no hace falta adivinar el tipo por texto ni por delta de saldo.
+
+    Lo que sí hay que arrastrar es el saldo corriente: el banco no lo imprime
+    en todas las filas, solo en el último movimiento de cada agrupación
+    (normalmente por día). Cuando no viene impreso, se calcula sumando el
+    monto con signo al último saldo conocido.
+
+    El PDF puede traer más de una cuenta (corriente en pesos, caja de
+    ahorro, cuenta en dólares) una atrás de otra: cada sección nueva reinicia
+    el saldo de arrastre con su propio "SALDO ULTIMO EXTRACTO"/"SALDO
+    ANTERIOR" y puede cambiar de moneda.
+    """
+    movimientos = []
+    lineas = texto.split('\n')
+
+    pat_fecha = re.compile(r'^(\d{2})-(\d{2})\s+(.*)$')
+    pat_num = re.compile(r'(\d{1,3}(?:\.\d{3})*,\d{2}-?)')
+    pat_saldo_inicial = re.compile(r'SALDO\s+(?:ULTIMO\s+EXTRACTO|ANTERIOR)\b', re.IGNORECASE)
+    pat_periodo = re.compile(
+        r'PERIODO\s+(\d{2})-(\d{2})-(\d{4})\s+AL\s+(\d{2})-(\d{2})-(\d{4})', re.IGNORECASE
+    )
+    pat_cuenta = re.compile(
+        r'(?:CUENTA\s+CORRIENTE|CAJA\s+DE\s+AHORROS?)\s+EN\s+(PESOS|D[OÓ]LARES)', re.IGNORECASE
+    )
+
+    mes_inicio = anio_inicio = mes_fin = anio_fin = None
+    saldo_prev = None
+    moneda_actual = 'ARS'
+
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continue
+
+        m_periodo = pat_periodo.search(linea)
+        if m_periodo:
+            mes_inicio, anio_inicio = m_periodo.group(2), m_periodo.group(3)
+            mes_fin, anio_fin = m_periodo.group(5), m_periodo.group(6)
+            continue
+
+        m_cuenta = pat_cuenta.search(linea)
+        if m_cuenta:
+            moneda_actual = 'USD' if 'lar' in m_cuenta.group(1).lower() else 'ARS'
+            continue
+
+        if pat_saldo_inicial.search(linea):
+            montos_ini = pat_num.findall(linea)
+            if montos_ini:
+                saldo_prev = limpiar_monto(montos_ini[-1])
+            continue
+
+        match_fecha = pat_fecha.match(linea)
+        if not match_fecha:
+            continue
+
+        dia, mes, resto = match_fecha.groups()
+
+        montos = pat_num.findall(resto)
+        if not montos:
+            continue
+
+        # Si hay 2+ números, el último es el saldo de cierre (no siempre presente)
+        if len(montos) >= 2:
+            monto_str = montos[-2]
+            saldo_impreso = limpiar_monto(montos[-1])
+        else:
+            monto_str = montos[-1]
+            saldo_impreso = None
+
+        monto = limpiar_monto(monto_str)
+        if monto is None:
+            continue
+
+        # Descripción = todo antes del monto, sin los números sueltos
+        # de comprobante/origen (se guardan juntos en 'referencia')
+        idx_monto = resto.rfind(monto_str)
+        desc_con_refs = resto[:idx_monto].strip()
+
+        pat_referencia = re.compile(r'(?<![A-Za-z0-9])\d{3,}(?![A-Za-z0-9,])')
+        referencia = ' '.join(pat_referencia.findall(desc_con_refs))
+        desc_limpia = pat_referencia.sub('', desc_con_refs)
+        desc_limpia = re.sub(r'\s+', ' ', desc_limpia).strip()
+
+        # El año no viene en la fecha (DD-MM): se infiere del período del resumen
+        anio = anio_fin
+        if mes_inicio and mes == mes_inicio:
+            anio = anio_inicio
+        elif mes_fin and mes == mes_fin:
+            anio = anio_fin
+        if not anio:
+            anio = str(datetime.now().year)
+
+        es_debito = monto < 0
+
+        if saldo_impreso is not None:
+            saldo_prev = saldo_impreso
+        elif saldo_prev is not None:
+            saldo_prev = round(saldo_prev + monto, 2)
+        saldo_final = saldo_prev
+
+        movimientos.append({
+            'fecha': normalizar_fecha(f'{dia}/{mes}/{anio}'),
+            'descripcion': desc_limpia,
+            'referencia': referencia,
+            'debito': abs(monto) if es_debito else None,
+            'credito': abs(monto) if not es_debito else None,
+            'saldo': saldo_final,
+            'moneda': moneda_actual,
+            'tipo': 'D' if es_debito else 'C',
         })
 
     return movimientos
@@ -679,10 +848,14 @@ def extraer_titular(texto: str) -> str:
                 return candidato
 
     # Estrategia 4: buscar líneas que parezcan nombre de empresa/persona
-    # (solo mayúsculas, letras, espacios, al menos 2 palabras)
-    excluir = ['banco', 'nacion', 'santander', 'resumen', 'cuenta', 'periodo']
+    # (solo mayúsculas, letras, espacios, al menos 2 palabras). La primera
+    # palabra debe tener 2+ letras (para no matchear headers con letras
+    # sueltas separadas por espacios, ej. "M E N D O Z A"), pero las
+    # siguientes admiten 1 letra para no descartar razones sociales con
+    # conectores cortos ("Y", "DE"), ej. "ARAMENDI Y ASOCIADOS SA".
+    excluir = ['banco', 'nacion', 'santander', 'resumen', 'cuenta', 'periodo', 'sucursal']
     for linea in lineas[:15]:
-        if re.match(r'^[A-ZÁÉÍÓÚÜ]{2,}(\s+[A-ZÁÉÍÓÚÜ]{2,})+$', linea):
+        if re.match(r'^[A-ZÁÉÍÓÚÜ]{2,}(\s+[A-ZÁÉÍÓÚÜ]{1,})+$', linea):
             if not any(p in linea.lower() for p in excluir):
                 return linea
 

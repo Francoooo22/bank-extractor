@@ -95,8 +95,13 @@ Responsabilidades:
 
 #### `extraer_de_texto(texto, banco)` → list
 - Aplica regex específico del banco
-- Soporta: Galicia, Santander, BBVA, Macro, Nación, HSBC
+- Soporta: Galicia, BBVA, Macro, HSBC
 - Clasifica montos como débito/crédito por palabras clave
+
+#### Parsers dedicados (no usan `PATRONES`/`extraer_de_texto`)
+- `extraer_santander(texto)` — comprobante, secciones pesos/USD
+- `extraer_nacion(texto)` — clasifica D/C comparando el delta real de saldo (`saldo_actual = saldo_anterior ± monto`) contra el monto impreso, no por prefijo de texto (una misma descripción puede ser débito o crédito según el CUIT asociado)
+- `extraer_icbc(texto)` — el importe trae signo explícito (termina en `-` = débito); arrastra saldo corriente entre filas porque el banco no lo imprime en todas; soporta múltiples cuentas/monedas en un mismo PDF
 
 #### `extraccion_generica(texto)` → list
 - Fallback agresivo (sin banco específico)

@@ -2,6 +2,27 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.2.0] - 2026-07-23
+
+### Agregado
+- ✨ **Parser dedicado ICBC** (`extraer_icbc`) — Formato `DD-MM CONCEPTO [COMPROBANTE] [ORIGEN] [CANAL] MONTO[-] [SALDO[-]]`.
+  - El propio banco imprime el signo en cada importe (termina en `-` = débito), así que no adivina por texto ni por prefijo.
+  - El saldo no viene en todas las filas (solo al cierre de cada agrupación/día): se arrastra un saldo corriente y se valida contra el impreso cuando aparece.
+  - El año no viene en la fecha (`DD-MM`): se infiere del `PERIODO DD-MM-YYYY AL DD-MM-YYYY` del encabezado.
+  - Soporta múltiples cuentas/monedas dentro de un mismo PDF (cuenta corriente en pesos, caja de ahorro, cuenta en dólares): cada `SALDO ULTIMO EXTRACTO`/`SALDO ANTERIOR` nuevo reinicia el arrastre y puede cambiar de moneda.
+  - Detección de banco por nombre completo (`bankofchina`, sin espacios por artefacto de extracción del PDF) o CUIT propio de ICBC (`30-70944784-6`), ya que el resumen nunca imprime la sigla "ICBC".
+- ✨ **Columna `documento`** — Nombre del PDF de origen (sin extensión), agregada al final de todas las columnas para cualquier banco. Permite identificar de qué resumen salió cada fila al combinar varios Excels.
+
+### Corregido (Banco Nación)
+- 🐛 **Débito/crédito invertidos** — `extraer_nacion` clasificaba por prefijo de texto (ej. "DEBIN" = siempre débito), pero una misma descripción puede ser débito o crédito según de quién sea el CUIT asociado (ej. "DEBIN <CUIT del propio titular>" es cobranza = crédito; "DEBIN <CUIT de un tercero>" es débito). Esto invertía **2532 movimientos** de un solo resumen mensual. Ahora se clasifica comparando el delta real de saldo (`saldo_actual = saldo_anterior ± monto`) contra el monto impreso; el prefijo queda solo como respaldo si no hay saldo previo confiable. Validado contra un resumen completo de 11.333 movimientos con 0 errores de consistencia encadenada.
+- 🐛 **Movimientos descartados** — El filtro de ruido tenía la palabra suelta `"banco"`, que matcheaba por accidente dentro de descripciones reales ("48HS. **BANCO**S", "COMIS. CANJE O/**BANCO**S") y las descartaba como si fueran encabezado. Se quitó esa palabra del filtro (el requisito de fecha al inicio de línea ya alcanza para filtrar los encabezados reales).
+- 🐛 **Signo de saldo negativo perdido** — El regex de montos no capturaba el guion final de saldos negativos (`304.019,41-`), así que el signo se perdía antes de llegar a `limpiar_monto`. Se agregó el guion opcional al regex.
+
+### Corregido (general)
+- 🐛 `extraer_titular` — La estrategia de fallback (línea en mayúsculas, 2+ palabras) no toleraba razones sociales con conectores de una letra ("Y", "DE"), ej. "ARAMENDI Y ASOCIADOS SA" quedaba sin matchear y se devolvía un dato menos relevante (ej. "SUCURSAL MENDOZA"). Se relajó el largo mínimo de las palabras siguientes a 1 letra.
+
+---
+
 ## [1.1.0] - 2026-07-21
 
 ### Agregado

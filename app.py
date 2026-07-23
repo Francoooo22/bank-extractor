@@ -185,11 +185,16 @@ def guardar_excel(resultado, ruta):
         # Hoja principal de movimientos
         df = pd.DataFrame(movs)
 
-        # Orden de columnas preferido
+        # Orden de columnas preferido. 'documento' (nombre del PDF de origen)
+        # va siempre al final, a la derecha de todo lo demás, para poder
+        # identificar de qué resumen salió cada fila si se combinan varios.
         cols_preferidas = ['fecha', 'descripcion', 'referencia', 'importe', 'saldo', 'moneda', 'tipo', 'titular', 'raw']
         cols_existentes = [c for c in cols_preferidas if c in df.columns]
-        otras = [c for c in df.columns if c not in cols_preferidas]
-        df = df[cols_existentes + otras]
+        otras = [c for c in df.columns if c not in cols_preferidas and c != 'documento']
+        orden_columnas = cols_existentes + otras
+        if 'documento' in df.columns:
+            orden_columnas.append('documento')
+        df = df[orden_columnas]
 
         df.to_excel(writer, sheet_name='Movimientos', index=False)
 

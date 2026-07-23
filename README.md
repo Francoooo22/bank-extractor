@@ -14,7 +14,7 @@ Herramienta local 100% privada que procesa PDFs de cualquier banco argentino (Ga
 
 - ✅ **Interfaz visual intuitiva** — Drag & drop, no necesitas terminal
 - ✅ **Auto-detección de banco** — Funciona con cualquier banco argentino
-- ✅ **Parsers dedicados** — Santander y Nación con extracción precisa
+- ✅ **Parsers dedicados** — Santander, Nación e ICBC con extracción precisa
 - ✅ **Multi-tenant** — Extrae y columna el titular (cliente) de cada PDF
 - ✅ **Formato homogéneo** — Mismas columnas para todos los bancos
 - ✅ **100% Local** — PDFs nunca salen de tu computadora
@@ -65,12 +65,13 @@ Cada movimiento se exporta con **las mismas columnas** para cualquier banco:
 | **moneda** | texto | ARS | Moneda (ARS o USD) |
 | **tipo** | texto | D | D = Débito, C = Crédito |
 | **titular** | texto | COPPARONI SOCIEDAD ANONIMA | Cliente titular de la cuenta |
+| **documento** | texto | extracto_20260723_123646 | Nombre del PDF de origen (sin extensión), siempre última columna |
 
 ### Ejemplo en Excel
-| fecha | descripcion | referencia | importe | saldo | moneda | tipo | titular |
-|-------|-------------|-----------|---------|-------|--------|------|---------|
-| 06/02/2026 | Transferencia realizada | 27329529 | -5000000 | 1555229.94 | ARS | D | CRISTIAN A. DE BENEDECTIS |
-| 06/02/2026 | Deposito de efectivo | 3454 | 1916100 | 3471329.94 | ARS | C | CRISTIAN A. DE BENEDECTIS |
+| fecha | descripcion | referencia | importe | saldo | moneda | tipo | titular | documento |
+|-------|-------------|-----------|---------|-------|--------|------|---------|-----------|
+| 06/02/2026 | Transferencia realizada | 27329529 | -5000000 | 1555229.94 | ARS | D | CRISTIAN A. DE BENEDECTIS | resumen_febrero |
+| 06/02/2026 | Deposito de efectivo | 3454 | 1916100 | 3471329.94 | ARS | C | CRISTIAN A. DE BENEDECTIS | resumen_febrero |
 
 ---
 
@@ -79,7 +80,8 @@ Cada movimiento se exporta con **las mismas columnas** para cualquier banco:
 | Banco | Parser | Notas |
 |-------|--------|-------|
 | Santander / Río | Dedicado | Extrae comprobante, USD, débitos/créditos |
-| Banco Nación (BNA) | Dedicado | Clasifica por prefijo (CR/DEBIN/GRAVAMEN) |
+| Banco Nación (BNA) | Dedicado | Clasifica D/C por delta de saldo real (no por prefijo) |
+| ICBC | Dedicado | Signo explícito por importe, arrastra saldo, multi-cuenta/moneda |
 | Banco Galicia | Genérico | Funciona bien |
 | BBVA / Francés | Genérico | Detecta 2 fechas |
 | Banco Macro | Genérico | Fecha sin año |
