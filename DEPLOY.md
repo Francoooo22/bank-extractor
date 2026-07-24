@@ -338,6 +338,31 @@ sudo systemctl restart bank-extractor
 
 ---
 
+## 🌐 Deploy alternativo — Render.com (gratis)
+
+Sin dependencias de sistema (no usa Tesseract/OpenCV como `ticket-extractor`), así que corre directo sobre el runtime Python nativo de Render, sin Docker.
+
+**Archivo:** `render.yaml` en la raíz del repo.
+
+### Pasos
+
+1. En [render.com](https://render.com) → **New** → **Blueprint** → conectar el repo `Francoooo22/bank-extractor`. Render detecta `render.yaml` solo (`type: web`, `runtime: python`, plan **Free**).
+2. Sin Blueprint: **New** → **Web Service** → conectar el repo → Render detecta Python automáticamente. Build command: `pip install -r requirements.txt gunicorn`. Start command: `gunicorn app:app --workers 2 --timeout 120 --bind 0.0.0.0:$PORT`. Plan **Free**.
+3. Deploy inicial: instala deps puras de Python (`pdfplumber`, `pandas`, `openpyxl`), sin build de imagen — mucho más rápido que `ticket-extractor`.
+4. URL pública: `https://bank-extractor-<hash>.onrender.com`.
+
+### Limitaciones del plan free
+
+- **Sleep tras 15 min de inactividad** — cold start ~30-60s en el primer request.
+- **Disco efímero** — `uploads/`/`outputs/` se borran en cada reinicio del contenedor, igual que en el server propio (ya se limpian solas a las 24h, no cambia el comportamiento esperado).
+- **Sin autenticación** — este servicio no tiene login. Al quedar público en `onrender.com`, cualquiera con la URL puede subir/ver extractos bancarios. Evaluar antes de compartir la URL ampliamente.
+
+### Nota
+
+`requirements.txt` incluye `python-magic`, pero no se usa en ningún `.py` del repo — no requiere `libmagic` de sistema, así que no afecta el deploy nativo. Se puede sacar en una limpieza aparte si querés.
+
+---
+
 ## 📞 Soporte
 
 Documentación completa: [README.md](README.md)  
