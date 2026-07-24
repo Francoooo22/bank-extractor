@@ -68,7 +68,17 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
     """
     banco = banco.lower().strip()
 
+    # Bancos con parser dedicado de texto: no necesitan extract_tables(),
+    # que es muy costoso en RAM/CPU y en PDFs de cientos de páginas puede
+    # tirar el proceso por OOM sin aportar nada (el parser de texto ya es
+    # más preciso que la extracción por tablas para estos formatos).
+    BANCOS_SIN_TABLAS = {'nacion', 'santander', 'icbc'}
+
     with pdfplumber.open(ruta_pdf) as pdf:
+        primer_texto = pdf.pages[0].extract_text() if pdf.pages else ''
+        banco_preliminar = detectar_banco(primer_texto or '') if banco == 'generico' else banco
+        usar_tablas = banco_preliminar not in BANCOS_SIN_TABLAS
+
         paginas_texto = []
         todas_tablas = []
 
@@ -76,10 +86,16 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
             texto = page.extract_text() or ''
             paginas_texto.append(texto)
 
-            # Intentar extracción por tablas
-            tablas = page.extract_tables()
-            if tablas:
-                todas_tablas.extend(tablas)
+            if usar_tablas:
+                tablas = page.extract_tables()
+                if tablas:
+                    todas_tablas.extend(tablas)
+
+            # pdfplumber cachea los caracteres/objetos de cada página mientras
+            # el PDF siga abierto; en documentos de cientos de páginas eso
+            # acumula memoria indefinidamente. Liberarlo apenas terminamos con
+            # la página evita que el proceso escale a gigabytes de RAM.
+            page.flush_cache()
 
     texto_completo = '\n'.join(paginas_texto)
     banco_detectado = detectar_banco(texto_completo) if banco == 'generico' else banco

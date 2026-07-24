@@ -2,6 +2,17 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.2.1] - 2026-07-24
+
+### Corregido
+- 🐛 **OOM en PDFs de cientos de páginas** — `extraer_movimientos` llamaba `page.extract_tables()` en todas las páginas sin importar el banco, incluso cuando había un parser dedicado de texto (Nación/Santander/ICBC) que no usa esa extracción para nada. En un resumen de Banco Nación de 404 páginas / 20.914 movimientos, eso hacía crecer el proceso a ~2GB de RAM y el kernel lo mataba por OOM (el servidor tiene 3.3GB totales, ya con ~2GB en uso por otros servicios) — el frontend veía la conexión cortada y mostraba `Unexpected token '<'` porque no llegaba una respuesta JSON. Ahora se detecta el banco a partir de la primera página *antes* de decidir si hace falta `extract_tables()`, y se salta directamente para los bancos con parser dedicado.
+- 🐛 **Fuga de memoria de pdfplumber en documentos largos** — pdfplumber cachea los caracteres/objetos de cada página mientras el PDF sigue abierto; al iterar cientos de páginas dentro del mismo `with pdfplumber.open(...)`, esa caché se acumulaba sin liberarse. Se agregó `page.flush_cache()` después de procesar cada página.
+- 🐛 **Servicio systemd duplicado (`bank-extractor.service`)** — quedaba corriendo en paralelo al proceso real (pm2) y competían por el puerto 5001; cuando systemd ganaba la carrera, pm2 quedaba en loop de reinicio infinito sin poder bindear el puerto. Se deshabilitó y detuvo el servicio systemd definitivamente (`systemctl disable --now`); pm2 es la única fuente de verdad para el deploy.
+- 🐛 **Timeout de nginx (504) en PDFs grandes** — el reverse proxy (`/etc/nginx/sites-available/tailscale-proxy`, location `/bank-extractor/`) cortaba la conexión a los 120s (`proxy_read_timeout`), pero un PDF de 404 páginas tarda entre 5 y 8 minutos en procesarse. Nginx devolvía una página de error HTML (504 Gateway Timeout) antes de que Flask terminara, y el frontend mostraba `Unexpected token '<'` al intentar parsearla como JSON. Se subió `proxy_read_timeout`/`proxy_send_timeout` a 600s.
+
+### Nota
+- El servidor sigue justo de RAM (3.3GB totales): un PDF de este tamaño (~21.000 movimientos) todavía puede acercarse a los 2GB de uso pico, y ese pico no se libera del todo entre requests. Subir dos PDFs igual de grandes uno justo después del otro (sin esperar a que el primero termine) puede seguir tirando el proceso por OOM. Si en el futuro aparecen resúmenes aún más grandes o esto se vuelve frecuente, considerar procesar por lotes de páginas, reiniciar el worker entre PDFs grandes, o ampliar RAM/swap.
+
 ## [1.2.0] - 2026-07-23
 
 ### Agregado
