@@ -13,6 +13,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from extractor import extraer_movimientos
+from extractor_seguros import extraer_resumen_seguros, exportar_excel
 
 # ─────────────────────────────────────────────
 #  CONFIGURACIÓN DE LOGGING
@@ -153,6 +154,59 @@ def descargar(nombre):
         return jsonify({'error': 'Archivo no encontrado'}), 404
     logger.info(f"⬇️  Descargando: {nombre}")
     return send_file(ruta, as_attachment=True)
+
+
+# ─────────────────────────────────────────────
+#  RUTAS: EXTRACTOR DE SEGUROS
+# ─────────────────────────────────────────────
+
+@app.route('/seguros')
+def seguros_index():
+    return render_template('seguros.html')
+
+
+@app.route('/seguros/procesar', methods=['POST'])
+def seguros_procesar():
+    limpiar_archivos_antiguos()
+
+    if 'archivo' not in request.files:
+        return jsonify({'error': 'No se recibió ningún archivo'}), 400
+
+    archivo = request.files['archivo']
+    if archivo.filename == '':
+        return jsonify({'error': 'Nombre de archivo vacío'}), 400
+
+    valido, msg_error = validar_pdf(archivo.filename)
+    if not valido:
+        return jsonify({'error': msg_error}), 400
+
+    nombre = secure_filename(archivo.filename)
+    ruta_pdf = os.path.join(app.config['UPLOAD_FOLDER'], nombre)
+
+    try:
+        archivo.save(ruta_pdf)
+        resultado = extraer_resumen_seguros(ruta_pdf)
+        logger.info(f"📄 Seguros - PDF procesado: {nombre} ({resultado['total_polizas']} pólizas)")
+
+        if not resultado['polizas']:
+            return jsonify({'error': 'No se encontraron pólizas en el PDF'}), 422
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        nombre_excel = f"seguros_{timestamp}.xlsx"
+        ruta_excel = os.path.join(app.config['OUTPUT_FOLDER'], nombre_excel)
+        exportar_excel(resultado, ruta_excel)
+
+        return jsonify({
+            'ok': True,
+            'archivo': nombre_excel,
+            'total': resultado['total_polizas'],
+            'info': resultado.get('info', {}),
+            'preview': resultado['polizas'][:10]
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error procesando PDF seguros: {str(e)}", exc_info=True)
+        return jsonify({'error': f'Error procesando PDF: {str(e)}'}), 500
 
 
 @app.route('/preview_texto', methods=['POST'])

@@ -68,6 +68,28 @@ def abrir_navegador(puerto):
 # ── MAIN ─────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    import sys
+    modo_seguros = '--seguros' in sys.argv
+
+    if modo_seguros:
+        print("=" * 52)
+        print("  🛡️  Extractor de Seguros PDF → Excel")
+        print("=" * 52)
+        print("\n📄  Modo CLI: procesá archivos directamente")
+        print("     Ej: python lanzar.py --seguros archivo.pdf")
+        print("     (sin args: abre interfaz web)\n")
+        if len(sys.argv) > 2:
+            archivo_pdf = sys.argv[2]
+            from extractor_seguros import procesar_pdf
+            instalar_si_falta()
+            try:
+                ruta = procesar_pdf(archivo_pdf)
+                print(f"✅ Excel generado: {ruta}")
+            except Exception as e:
+                print(f"❌ Error: {e}")
+                sys.exit(1)
+            sys.exit(0)
+
     print("=" * 52)
     print("  🏦  Extractor Bancario PDF → Excel")
     print("=" * 52)
@@ -83,6 +105,8 @@ if __name__ == '__main__':
     t.start()
 
     print(f"\n🚀 Servidor corriendo en http://localhost:{PUERTO}")
+    print("   📋  Extractor Bancario: http://localhost:5000")
+    print("   🛡️   Extractor Seguros:  http://localhost:5000/seguros")
     print("   Cerrá esta ventana para detener la aplicación.\n")
 
     # Arrancar Flask (bloquea hasta que se cierre la ventana)

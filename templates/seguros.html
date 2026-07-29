@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extractor Seguros · PDF → Excel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0e14; --bg-panel: #111520; --bg-card: #161b27;
+      --bg-hover: #1c2233; --border: #252d3f; --accent: #00e87a;
+      --accent-dim: #00b85f; --text: #e8edf5; --text-dim: #7b89a3;
+      --danger: #ff4d6a;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif;
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 720px; width: 100%; }
+    h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: .25rem; }
+    .sub { color: var(--text-dim); font-size: .95rem; margin-bottom: 2rem; }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 2rem; margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: 10px; padding: 3rem 2rem;
+      text-align: center; cursor: pointer; transition: all .2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent); background: var(--bg-hover);
+    }
+    .drop-zone.has-file { border-color: var(--accent); border-style: solid; }
+    .drop-zone .icon { font-size: 2.5rem; margin-bottom: .75rem; }
+    .drop-zone p { color: var(--text-dim); font-size: .9rem; }
+    .drop-zone .filename { color: var(--accent); font-weight: 500; margin-top: .5rem; }
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: var(--accent); color: #0c0e14; border: none; border-radius: 8px;
+      padding: .75rem 1.5rem; font-size: 1rem; font-weight: 600; cursor: pointer;
+      transition: all .15s; font-family: inherit;
+    }
+    .btn:hover { background: var(--accent-dim); transform: translateY(-1px); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+    .btn-secondary {
+      background: transparent; color: var(--text); border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+    .status { margin-top: 1rem; padding: .75rem 1rem; border-radius: 8px; font-size: .9rem; display: none; }
+    .status.error { display: block; background: rgba(255,77,106,.12); color: var(--danger); border: 1px solid var(--danger); }
+    .status.success { display: block; background: rgba(0,232,122,.1); color: var(--accent); border: 1px solid var(--accent); }
+    .status.loading { display: block; background: rgba(123,137,163,.1); color: var(--text-dim); border: 1px solid var(--border); }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; font-size: .9rem; }
+    .info-grid .label { color: var(--text-dim); }
+    .info-grid .value { color: var(--text); font-weight: 500; text-align: right; }
+    .nav-link {
+      display: inline-flex; align-items: center; gap: .4rem; color: var(--text-dim);
+      text-decoration: none; font-size: .85rem; margin-bottom: 1.5rem; transition: color .15s;
+    }
+    .nav-link:hover { color: var(--accent); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="nav-link">&larr; Volver al Extractor Bancario</a>
+    <h1>Extractor de Seguros</h1>
+    <p class="sub">Convertí resúmenes de deuda de pólizas de seguro (PDF) a Excel</p>
+
+    <div class="card">
+      <h2>Subir PDF</h2>
+      <div class="drop-zone" id="dropZone">
+        <div class="icon">&#128229;</div>
+        <p>Arrastrá el PDF acá o hacé clic para seleccionar</p>
+        <p class="filename" id="fileName"></p>
+        <input type="file" id="fileInput" accept=".pdf" style="display:none">
+      </div>
+      <div style="margin-top:1rem;text-align:center">
+        <button class="btn" id="btnProcesar" disabled>Procesar PDF</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card hidden" id="resultCard">
+      <h2>Resultado</h2>
+      <div class="info-grid" id="resultInfo"></div>
+      <div style="margin-top:1rem;text-align:center">
+        <a id="downloadLink" class="btn" href="#">Descargar Excel</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const btnProcesar = document.getElementById('btnProcesar');
+    const status = document.getElementById('status');
+    const resultCard = document.getElementById('resultCard');
+    const resultInfo = document.getElementById('resultInfo');
+    const downloadLink = document.getElementById('downloadLink');
+    let selectedFile = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+    function handleFile(file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showStatus('Solo se aceptan archivos PDF', 'error'); return;
+      }
+      selectedFile = file;
+      fileName.textContent = file.name;
+      dropZone.classList.add('has-file');
+      btnProcesar.disabled = false;
+      hideStatus();
+      resultCard.classList.add('hidden');
+    }
+
+    btnProcesar.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      btnProcesar.disabled = true;
+      showStatus('Procesando PDF...', 'loading');
+
+      const form = new FormData();
+      form.append('archivo', selectedFile);
+
+      try {
+        const res = await fetch('/seguros/procesar', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) { showStatus(data.error || 'Error del servidor', 'error'); btnProcesar.disabled = false; return; }
+
+        showStatus(`&check; ${data.total} pólizas extraídas correctamente`, 'success');
+        resultInfo.innerHTML = `
+          <span class="label">Total Pólizas</span><span class="value">${data.total}</span>
+          <span class="label">Fecha Resumen</span><span class="value">${data.info?.fecha_resumen || '-'}</span>
+          <span class="label">Cliente</span><span class="value">${data.info?.cliente?.replace(/\s+/g,' ').trim() || '-'}</span>
+          <span class="label">Productor</span><span class="value">${data.info?.productor || '-'}</span>
+        `;
+        downloadLink.href = `/descargar/${data.archivo}`;
+        resultCard.classList.remove('hidden');
+      } catch (e) {
+        showStatus('Error de conexión', 'error');
+      }
+      btnProcesar.disabled = false;
+    });
+
+    function showStatus(msg, type) {
+      status.className = 'status ' + type;
+      status.innerHTML = msg;
+    }
+    function hideStatus() { status.className = 'status'; }
+  </script>
+</body>
+</html>

@@ -4,9 +4,10 @@
 [![Flask 2.3+](https://img.shields.io/badge/Flask-2.3%2B-green)](https://flask.palletsprojects.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Extractor bancario profesional que convierte resúmenes PDF a planillas Excel para conciliación.**
+**Dual extractor: resúmenes bancarios + pólizas de seguro PDF → Excel.**
 
-Herramienta local 100% privada que procesa PDFs de cualquier banco argentino (Galicia, Santander, BBVA, Macro, Nación, HSBC, etc.) y genera Excel estructurado listo para contabilidad. Soporte multi-tenant: identifica automáticamente el titular de cada cuenta.
+Procesa PDFs de cualquier banco argentino (Galicia, Santander, BBVA, Macro, Nación, HSBC, etc.)
+y también resúmenes de deuda de pólizas de seguro. Todo 100% local.
 
 ---
 
@@ -14,13 +15,28 @@ Herramienta local 100% privada que procesa PDFs de cualquier banco argentino (Ga
 
 - ✅ **Interfaz visual intuitiva** — Drag & drop, no necesitas terminal
 - ✅ **Auto-detección de banco** — Funciona con cualquier banco argentino
-- ✅ **Parsers dedicados** — Santander, Nación e ICBC con extracción precisa
-- ✅ **Multi-tenant** — Extrae y columna el titular (cliente) de cada PDF
-- ✅ **Formato homogéneo** — Mismas columnas para todos los bancos
+- ✅ **3 métodos de extracción** — Tablas, regex específico, fallback genérico
+- ✅ **Extractor de seguros** — Pólizas de seguro PDF → Excel
 - ✅ **100% Local** — PDFs nunca salen de tu computadora
+- ✅ **Sin dependencias externas** — Solo Python + librerías
 - ✅ **Inicio automático** — Doble clic y listo
-- ✅ **Excel profesional** — 2 hojas: Movimientos + Resumen
-- ✅ **Debug incluido** — Ver texto crudo del PDF para diagnosticar
+- ✅ **Excel profesional** — 2 hojas: Movimientos + Resumen (bancario) / Pólizas + Resumen (seguros)
+- ✅ **Debug incluido** — Ver texto crudo del PDF para diagnosticar problemas
+- ✅ **CLI directo** — `python lanzar.py --seguros archivo.pdf`
+
+---
+
+## 🛡️ Extractor de Seguros (Nuevo)
+
+Además de extractor bancario, ahora también soporta **resúmenes de deuda de pólizas de seguro**.
+Subí el PDF de "RESUMEN DE CUENTA" de tu aseguradora y obtené un Excel con todas las pólizas.
+
+| Ruta | Descripción |
+|------|-------------|
+| `/seguros` | Interfaz web para extraer pólizas de seguro |
+| `python lanzar.py --seguros archivo.pdf` | Modo CLI directo |
+
+**Columnas extraídas:** PÓLIZA, VIGENCIA_DESDE, VIGENCIA_HASTA, SALDO, TP, VENCIMIENTO, INTERÉS, FACTURA, ASEGURADO_OBJETO
 
 ---
 
@@ -43,79 +59,162 @@ cd bank-extractor
 | **Mac** | Doble clic en `Iniciar_Mac.command` (primera vez: clic derecho → Abrir) |
 | **Linux** | `chmod +x Iniciar_Mac.command && ./Iniciar_Mac.command` |
 
+El lanzador:
+- ✓ Instala dependencias automáticamente
+- ✓ Arranca el servidor Flask
+- ✓ Abre el navegador en `http://localhost:5000`
+
 ### 3. Usar
 1. Sube tu PDF bancario (drag & drop o click)
 2. Selecciona banco (o deja auto-detección)
 3. Espera extracción (~2 segundos)
 4. Descarga Excel
 
+**¡Listo!** Usa el Excel para conciliación o importa a tu software contable.
+
 ---
 
-## 📊 Formato de Salida
+## 📊 Qué Extrae
 
-Cada movimiento se exporta con **las mismas columnas** para cualquier banco:
+Cada movimiento incluye:
 
-| Campo | Tipo | Ejemplo | Descripción |
-|-------|------|---------|-------------|
-| **fecha** | texto | 15/07/2026 | Fecha del movimiento |
-| **descripcion** | texto | TRANSFERENCIA RECIBIDA | Descripción de la operación |
-| **referencia** | texto | 27329529 | Número de comprobante |
-| **importe** | número | -5000000 | Positivo = crédito, Negativo = débito |
-| **saldo** | número | 1555229.94 | Saldo posterior al movimiento |
-| **moneda** | texto | ARS | Moneda (ARS o USD) |
-| **tipo** | texto | D | D = Débito, C = Crédito |
-| **titular** | texto | COPPARONI SOCIEDAD ANONIMA | Cliente titular de la cuenta |
-| **documento** | texto | extracto_20260723_123646 | Nombre del PDF de origen (sin extensión), siempre última columna |
+| Campo | Ejemplo | Uso |
+|-------|---------|-----|
+| **Fecha** | 15/07/2024 | Correlacionar con registros |
+| **Descripción** | TRANSFERENCIA RECIBIDA | Identificar tipo de operación |
+| **Débito** | 1500.00 | Egresos (pagos, retiros) |
+| **Crédito** | 2500.50 | Ingresos (depósitos) |
+| **Saldo** | 50000.00 | Verificar cierre de día |
+| **Referencia** | OP-123456 | Número de comprobante |
+| **Tipo** | D/C | Débito o Crédito |
 
-### Ejemplo en Excel
-| fecha | descripcion | referencia | importe | saldo | moneda | tipo | titular | documento |
-|-------|-------------|-----------|---------|-------|--------|------|---------|-----------|
-| 06/02/2026 | Transferencia realizada | 27329529 | -5000000 | 1555229.94 | ARS | D | CRISTIAN A. DE BENEDECTIS | resumen_febrero |
-| 06/02/2026 | Deposito de efectivo | 3454 | 1916100 | 3471329.94 | ARS | C | CRISTIAN A. DE BENEDECTIS | resumen_febrero |
+**Generas un Excel con:**
+- 📑 Hoja "Movimientos" — Todos los registros
+- 📑 Hoja "Resumen" — Totales y metadata
 
 ---
 
 ## 🏦 Bancos Soportados
 
-| Banco | Parser | Notas |
+| Banco | Estado | Notas |
 |-------|--------|-------|
-| Santander / Río | Dedicado | Extrae comprobante, USD, débitos/créditos |
-| Banco Nación (BNA) | Dedicado | Clasifica D/C por delta de saldo real (no por prefijo) |
-| ICBC | Dedicado | Signo explícito por importe, arrastra saldo, multi-cuenta/moneda |
-| Banco Galicia | Genérico | Funciona bien |
-| BBVA / Francés | Genérico | Detecta 2 fechas |
-| Banco Macro | Genérico | Fecha sin año |
-| HSBC | Genérico | Funciona bien |
-| **Cualquier otro** | Genérico | Fallback automático |
+| Banco Galicia | ✅ Completo | Muy confiable |
+| Santander / Río | ✅ Completo | Funciona bien |
+| BBVA / Francés | ✅ Completo | Detecta 2 fechas |
+| Banco Macro | ✅ Completo | Fecha sin año |
+| Banco Nación (BNA) | ✅ Completo | Estándar |
+| HSBC | ✅ Completo | Funciona bien |
+| ICBC | ✅ Automático | Via detección genérica |
+| Banco Provincia | ✅ Automático | Via detección genérica |
+| Supervielle | ✅ Automático | Via detección genérica |
+| **Cualquier otro** | ✅ Modo Genérico | Fallback automático |
+
+No aparece tu banco? **[Abre un Issue](https://github.com/Francoooo22/bank-extractor/issues)** con un PDF de ejemplo (anónimo).
 
 ---
 
 ## 🛠️ Agregar Soporte Nuevo Banco
 
+¿Necesitas un banco no listado? Fácil:
+
 1. Descarga un extracto PDF del banco
-2. Analiza el formato (ver `extractor.py`)
-3. Crear función `extraer_mi_banco(texto)` siguiendo el patrón de `extraer_santander()` o `extraer_nacion()`
-4. Agregar detección en `detectar_banco()`
-5. Integrar en `extraer_movimientos()`
+2. Abre `extractor.py`
+3. Busca `PATRONES = {`
+4. Agrega entrada nueva:
+   ```python
+   'mi_banco': {
+       'movimiento': re.compile(r'(\d{2}/\d{2}/\d{4})\s+(.+?)\s+([\d.,]+)'),
+       'fecha_fmt': '%d/%m/%Y',
+   },
+   ```
+5. Agrega palabra clave en `detectar_banco()`:
+   ```python
+   'mi_banco': ['mi banco', 'mibanc'],
+   ```
+6. [Haz un PR](CONTRIBUTING.md) para compartir 🎉
 
 Ver **[ARCHITECTURE.md](ARCHITECTURE.md)** para detalles técnicos.
 
 ---
 
-## 🔒 Privacidad & Seguridad
+## 🐛 Problemas Comunes
 
-✅ **100% local** — PDFs nunca se suben a internet
-✅ **Auto-limpieza** — Archivos se eliminan después de 24h
-✅ **Código abierto** — Revisa todo en GitHub
+### "No se encontraron movimientos"
+- ✓ Probá seleccionar **"Genérico"** manualmente
+- ✓ Click **"Ver texto crudo"** para diagnosticar
+- ✓ ¿PDF descargado de home banking? (no escaneado)
+- ✓ ¿Fecha visible? (algunos PDFs no tienen fechas)
+
+### "Los números no coinciden"
+- ✓ Algunos bancos usan formato regional (1.234,56)
+- ✓ El sistema auto-convierte; verifica en Excel
+
+### "Python no encontrado" (Windows)
+- ✓ Instala desde https://www.python.org/downloads/
+- ✓ **Importante:** Marca la casilla **"Add Python to PATH"**
+
+### "Port 5000 en uso"
+- ✓ Cierra otras apps que usen ese puerto
+- ✓ O edita `lanzar.py` línea 24: `PUERTO = 5001`
 
 ---
 
-## 📚 Documentación
+## 🔒 Privacidad & Seguridad
+
+✅ **100% local**
+- PDFs nunca se suben a internet
+- Sin servidores remotos
+- Control total
+
+✅ **Sin datos guardados**
+- Archivos se borran después de descargar
+- Modo "set it and forget it"
+
+✅ **Código abierto**
+- Revisa todo en GitHub
+- Sin código oculto
+
+---
+
+## 📚 Documentación Técnica
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — Diseño y componentes
-- **[DEPLOY.md](DEPLOY.md)** — Guía de despliegue (PM2, Nginx, Tailscale)
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Cómo contribuir
 - **[CHANGELOG.md](CHANGELOG.md)** — Historial de cambios
+
+---
+
+## 🚦 Para Desarrolladores
+
+### Setup
+```bash
+git clone https://github.com/Francoooo22/bank-extractor.git
+cd bank-extractor
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Ejecutar en desarrollo
+```bash
+python app.py  # Va a http://localhost:5000
+```
+
+### Hacer cambios
+1. Edita el código
+2. Flask se recarga automáticamente (debug=True)
+3. Prueba en navegador
+
+### Testing
+```bash
+# Prueba extracción con PDF específico
+python -c "
+from extractor import extraer_movimientos
+r = extraer_movimientos('path/to/pdf.pdf', 'galicia')
+for mov in r['movimientos']:
+    print(mov)
+"
+```
 
 ---
 
@@ -127,11 +226,59 @@ Ver **[ARCHITECTURE.md](ARCHITECTURE.md)** para detalles técnicos.
 | pdfplumber | ≥0.10.0 | Lectura de PDFs |
 | Pandas | ≥2.0.0 | Manipulación de datos |
 | openpyxl | ≥3.1.0 | Escritura de Excel |
+| werkzeug | ≥2.3.0 | Validación |
+
+Instaladas automáticamente via `pip install -r requirements.txt`
+
+---
+
+## 📈 Roadmap
+
+### v2.0 (próximas)
+- [ ] Exportar a CSV, ODS, JSON
+- [ ] Conciliación automática (comparar con mes anterior)
+- [ ] Base de datos de históricos
+- [ ] Interfaz modo oscuro
+- [ ] API REST
+
+### Futuro
+- [ ] OCR para PDFs escaneados
+- [ ] Validación CUIT/CBU
+- [ ] Multi-idioma
+
+---
+
+## 🤝 Contribuir
+
+¡Las contribuciones son bienvenidas!
+
+1. **Reportar bugs:** [Issues](https://github.com/Francoooo22/bank-extractor/issues)
+2. **Sugerir mejoras:** [Discussions](https://github.com/Francoooo22/bank-extractor/discussions)
+3. **Hacer PRs:** Ver [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## 📄 Licencia
+
+[MIT License](LICENSE) — Usa libremente en proyectos personales y comerciales.
 
 ---
 
 ## 👤 Autor
 
-**Franco Bocchi**
+**Franco Bocchi**  
 - 🌐 [GitHub](https://github.com/Francoooo22)
 - 📧 bfproductosyservicios@gmail.com
+
+---
+
+## ❤️ Agradecimientos
+
+- PDFPlumber por la librería de extracción PDF
+- Flask por el framework web simple
+- Pandas por manipulación de datos
+- Todos los que reportan bugs y sugieren mejoras
+
+---
+
+**¿Preguntas?** Abre un [Issue](https://github.com/Francoooo22/bank-extractor/issues) o [Discussion](https://github.com/Francoooo22/bank-extractor/discussions) 🚀
