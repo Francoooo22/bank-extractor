@@ -4,9 +4,10 @@
 [![Flask 2.3+](https://img.shields.io/badge/Flask-2.3%2B-green)](https://flask.palletsprojects.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Extractor bancario profesional que convierte resúmenes PDF a planillas Excel para conciliación.**
+**Dual extractor: resúmenes bancarios + pólizas de seguro PDF → Excel.**
 
-Herramienta local 100% privada que procesa PDFs de cualquier banco argentino (Galicia, Santander, BBVA, Macro, Nación, HSBC, etc.) y genera Excel estructurado listo para contabilidad.
+Procesa PDFs de cualquier banco argentino (Galicia, Santander, BBVA, Macro, Nación, HSBC, etc.)
+y también resúmenes de deuda de pólizas de seguro. Todo 100% local.
 
 ---
 
@@ -15,11 +16,27 @@ Herramienta local 100% privada que procesa PDFs de cualquier banco argentino (Ga
 - ✅ **Interfaz visual intuitiva** — Drag & drop, no necesitas terminal
 - ✅ **Auto-detección de banco** — Funciona con cualquier banco argentino
 - ✅ **3 métodos de extracción** — Tablas, regex específico, fallback genérico
+- ✅ **Extractor de seguros** — Pólizas de seguro PDF → Excel
 - ✅ **100% Local** — PDFs nunca salen de tu computadora
 - ✅ **Sin dependencias externas** — Solo Python + librerías
 - ✅ **Inicio automático** — Doble clic y listo
-- ✅ **Excel profesional** — 2 hojas: Movimientos + Resumen
+- ✅ **Excel profesional** — 2 hojas: Movimientos + Resumen (bancario) / Pólizas + Resumen (seguros)
 - ✅ **Debug incluido** — Ver texto crudo del PDF para diagnosticar problemas
+- ✅ **CLI directo** — `python lanzar.py --seguros archivo.pdf`
+
+---
+
+## 🛡️ Extractor de Seguros (Nuevo)
+
+Además de extractor bancario, ahora también soporta **resúmenes de deuda de pólizas de seguro**.
+Subí el PDF de "RESUMEN DE CUENTA" de tu aseguradora y obtené un Excel con todas las pólizas.
+
+| Ruta | Descripción |
+|------|-------------|
+| `/seguros` | Interfaz web para extraer pólizas de seguro |
+| `python lanzar.py --seguros archivo.pdf` | Modo CLI directo |
+
+**Columnas extraídas:** PÓLIZA, VIGENCIA_DESDE, VIGENCIA_HASTA, SALDO, TP, VENCIMIENTO, INTERÉS, FACTURA, ASEGURADO_OBJETO
 
 ---
 

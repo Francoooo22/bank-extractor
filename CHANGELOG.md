@@ -2,6 +2,26 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.1.0] - 2026-07-29
+
+### Agregado
+- ✨ **Extractor de Seguros** — nuevo módulo `extractor_seguros.py`
+- ✨ Conversión de resúmenes de deuda de pólizas de seguro (PDF → Excel)
+- ✨ Extracción de 11 columnas: PÓLIZA, VIGENCIA, SALDO, TP, VENCIMIENTO, INTERÉS, FACTURA, ASEGURADO, OBJETO
+- ✨ Interfaz web en `/seguros` con drag & drop
+- ✨ Modo CLI: `python lanzar.py --seguros archivo.pdf`
+- ✨ Exportación a Excel con 2 hojas: "Pólizas" + "Resumen"
+- ✨ 20 tests unitarios y de integración para `extractor_seguros.py`
+- ✨ Limpieza automática de artefactos numéricos del PDF
+- ✨ Captura de metadatos del resumen (fecha, cliente, productor)
+
+### Cobertura de Formatos Soportados
+- 🏦 Resúmenes de deuda de aseguradoras (formato "RESUMEN DE DEUDA")
+- 🛡️ Pólizas de seguro de vida, accidentes personales, RC
+- 📄 Múltiples hojas (100+ páginas detectadas correctamente)
+
+---
+
 ## [1.0.0] - 2024-07-20
 
 ### Agregado
@@ -58,6 +78,7 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 - [ ] Base de datos de históricos
 - [ ] Modo oscuro en UI
 - [ ] API REST
+- [x] ~~Extractor de seguros~~ (implementado en v1.1.0)
 
 ### v3.0
 - [ ] OCR para PDFs escaneados
