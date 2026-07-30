@@ -100,8 +100,8 @@ Cada movimiento incluye:
 |-------|--------|-------|
 | Banco Galicia | ✅ Completo | Muy confiable |
 | Santander / Río | ✅ Completo | Funciona bien |
-| BBVA / Francés | ✅ Completo | Detecta 2 fechas |
-| Banco Macro | ✅ Completo | Fecha sin año |
+| BBVA / Francés | ✅ Parser dedicado | Clasifica C/D por signo del importe |
+| Banco Macro | ✅ Parser dedicado | Múltiples cuentas, clasifica por delta de saldo |
 | Banco Nación (BNA) | ✅ Completo | Estándar |
 | HSBC | ✅ Completo | Funciona bien |
 | ICBC | ✅ Automático | Via detección genérica |

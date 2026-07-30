@@ -2,6 +2,23 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.2.0] - 2026-07-29
+
+### Agregado
+- ✨ **Parser BBVA** — parser dedicado para resúmenes de cuenta BBVA
+- ✨ **Parser Macro** — parser dedicado para resúmenes Banco Macro (múltiples cuentas)
+- ✨ Clasificación débito/crédito por signo del importe (BBVA) y por delta de saldo (Macro)
+- ✨ Columna `cuenta` en el Excel de salida para identificar cuenta de origen
+- ✨ Detección automática de banco para BBVA y Macro
+- ✨ Exclusión de sección de inversiones en PDFs de BBVA
+
+### Cobertura de Formatos Soportados
+- 🏦 BBVA: resúmenes "Cuenta Pyme Persona Jurídica" (formato FECHA ORIGEN CONCEPTO DEBITO CREDITO SALDO)
+- 🏦 Macro: resúmenes con múltiples cuentas (CC Pesos, CC Dólares, CC Bancaria)
+- 🏦 Macro: extracción de titular y CUIT del titular
+
+---
+
 ## [1.1.0] - 2026-07-29
 
 ### Agregado
