@@ -72,7 +72,7 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
     # que es muy costoso en RAM/CPU y en PDFs de cientos de páginas puede
     # tirar el proceso por OOM sin aportar nada (el parser de texto ya es
     # más preciso que la extracción por tablas para estos formatos).
-    BANCOS_SIN_TABLAS = {'nacion', 'santander', 'icbc'}
+    BANCOS_SIN_TABLAS = {'nacion', 'santander', 'icbc', 'bbva', 'macro'}
 
     with pdfplumber.open(ruta_pdf) as pdf:
         primer_texto = pdf.pages[0].extract_text() if pdf.pages else ''
@@ -117,6 +117,14 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
     # Parser dedicado para ICBC
     if not movimientos and banco_detectado == 'icbc':
         movimientos = extraer_icbc(texto_completo)
+
+    # Parser dedicado para BBVA
+    if not movimientos and banco_detectado == 'bbva':
+        movimientos = extraer_bbva(texto_completo)
+
+    # Parser dedicado para Macro
+    if not movimientos and banco_detectado == 'macro':
+        movimientos = extraer_macro(texto_completo)
 
     # Si no hubo éxito con tablas, usar regex sobre texto
     if not movimientos:
@@ -813,6 +821,326 @@ def extraccion_generica(texto):
             mov['credito'] = valores[0]
 
         movimientos.append(mov)
+
+    return movimientos
+
+
+# ─────────────────────────────────────────────
+#  EXTRACCIÓN BBVA (DEDICADA)
+# ─────────────────────────────────────────────
+
+def extraer_bbva(texto):
+    """
+    Parser dedicado para resúmenes BBVA.
+    Formato: DD/MM [ORIGEN] CONCEPTO IMPORTE SALDO
+
+    El importe ya viene con signo: positivo = crédito, negativo = débito.
+    """
+    movimientos = []
+    lineas = texto.split('\n')
+
+    pat_mov = re.compile(
+        r'^(\d{2}/\d{2})\s+(.+?)\s+'
+        r'(-?\d[\d\.]*,\d{2})\s+'
+        r'(-?\d[\d\.]*,\d{2})$'
+    )
+    pat_saldo_ant = re.compile(r'SALDO\s+ANTERIOR\s+([\d\.]+,\d{2})', re.IGNORECASE)
+    pat_cuenta = re.compile(r'CC\s+\$\s+([\d\-/]+)\s+\(([^)]+)\)', re.IGNORECASE)
+    pat_cbu = re.compile(r'CBU\s+(\d[\d\s]+)')
+    pat_sep = re.compile(r'^-+$')
+
+    ruido = [
+        'feecha origen', 'detalle', 'saldo al', 'total mov',
+        'total cobrado', 'total dev', 'imp. neto',
+        'sobre (', 'página', 'legales', 'importante',
+        'usted puede', 'http', 'cuenta pyme', 'intervinientes',
+        'mantenimiento', 'movimientos', 'bonificaciones',
+        'consolidado', 'inversiones', 'transferencias',
+        'débitos automáticos', 'realizados', 'recibidas',
+        'saldos disponibles', 'operaciones realizadas',
+        '3-91300005', 'orn', 'tiuc', 'otpircsni',
+        'elbasnopser', 'avi', 'anitnegra', 'avbb', 'ocnab',
+        '(cid:', 'fecha venc', 'cta. títulos',
+        'fba renpeb', 'total saldos', 'total de inversion',
+        'valorizadas', 'saldo consolidado',
+    ]
+
+    saldo_prev = None
+    cuenta_actual = ''
+    moneda_actual = 'ARS'
+    year = None
+
+    # Detectar año
+    m_year = re.search(r'20\d{2}', texto[:2000])
+    if m_year:
+        year = m_year.group(0)
+
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continue
+
+        # Detectar cuenta
+        m_cuenta = pat_cuenta.search(linea)
+        if m_cuenta:
+            cuenta_actual = m_cuenta.group(1)
+            continue
+
+        # Detectar moneda
+        if 'DOLARES' in linea.upper():
+            moneda_actual = 'USD'
+        elif 'PESOS' in linea.upper() or 'CC $' in linea:
+            moneda_actual = 'ARS'
+
+        # Detectar CBU
+        m_cbu = pat_cbu.search(linea)
+        if m_cbu:
+            continue
+
+        # Saldo anterior
+        m_sal = pat_saldo_ant.search(linea)
+        if m_sal:
+            saldo_prev = limpiar_monto(m_sal.group(1))
+            continue
+
+        # Saltar ruido
+        linea_lower = linea.lower()
+        if any(kw in linea_lower for kw in ruido):
+            continue
+        if pat_sep.match(linea):
+            continue
+
+        # Parsear movimiento
+        m = pat_mov.match(linea)
+        if not m:
+            continue
+
+        fecha_ddmm = m.group(1)
+        concepto = m.group(2).strip()
+        importe_str = m.group(3)
+        saldo_str = m.group(4)
+
+        importe = limpiar_monto(importe_str)
+        saldo = limpiar_monto(saldo_str)
+
+        if importe is None or saldo is None:
+            continue
+
+        fecha_completa = f"{fecha_ddmm}/{year}" if year else fecha_ddmm
+
+        # Clasificar por signo del importe
+        es_credito = importe >= 0
+
+        movimientos.append({
+            'fecha': normalizar_fecha(fecha_completa),
+            'descripcion': concepto,
+            'debito': abs(importe) if not es_credito else None,
+            'credito': abs(importe) if es_credito else None,
+            'saldo': saldo,
+            'moneda': moneda_actual,
+            'tipo': 'C' if es_credito else 'D',
+            'cuenta': cuenta_actual,
+        })
+
+        saldo_prev = saldo
+
+    return movimientos
+
+
+# ─────────────────────────────────────────────
+#  EXTRACCIÓN MACRO (DEDICADA)
+# ─────────────────────────────────────────────
+
+def extraer_macro(texto):
+    """
+    Parser dedicado para resúmenes Banco Macro.
+    Formato: DD/MM/YY DESCRIPCION [REFERENCIA] MONTO SALDO
+
+    Clasificación débito/crédito: por delta de saldo entre filas
+    de la misma cuenta. El PDF puede tener múltiples cuentas.
+    """
+    movimientos = []
+    lineas = texto.split('\n')
+
+    pat_mov_2m = re.compile(
+        r'^(\d{2}/\d{2}/\d{2})\s+(.+?)\s+'
+        r'(\d[\d\.]*,\d{2})\s+'
+        r'(-?\d[\d\.]*,\d{2})$'
+    )
+    pat_mov_1m = re.compile(
+        r'^(\d{2}/\d{2}/\d{2})\s+(.+?)\s+'
+        r'(-?\d[\d\.]*,\d{2})\s+'
+        r'(-?\d[\d\.]*,\d{2})$'
+    )
+    pat_saldo_ant = re.compile(
+        r'SALDO\s+(?:ULTIMO\s+EXTRACTO|ANTERIOR)\s+AL\s+\d{2}/\d{2}/\d{4}\s+([\d\.]+,\d{2})',
+        re.IGNORECASE
+    )
+    pat_cuenta = re.compile(
+        r'CUENTA\s+(?:CORRIENTE|CAJA)\s+(?:ESPECIAL\s+EN\s+)?(?:DOLARES|PESOS|BANCARIA)\s+NRO\.?:\s*([\d\-]+)',
+        re.IGNORECASE
+    )
+    pat_moneda = re.compile(
+        r'(?:CUENTA\s+CORRIENTE\s+(?:ESPECIAL\s+EN\s+)?)(DOLARES|PESOS)',
+        re.IGNORECASE
+    )
+    pat_sep = re.compile(r'^-+$')
+
+    ruido = [
+        'sucursal', 'sr(es)', 'carril', 'rodriguez',
+        'resumen', 'periodo', 'hoja', 'saldos consolidados',
+        'saldo cuentas', 'informacion', 'clave bancaria',
+        'tasa nom', 'tasa efc', 'detalle de movimiento',
+        'total cobrado', 'estimado cliente', 'los depositos',
+        'ley 24.485', 'd. 409/2018', 'cuenta corriente',
+        'fecha descripcion', 'saldo final', 'cantidad',
+        'imp.s/creds', 'transf. macronline',
+    ]
+
+    saldos_por_cuenta = {}
+    cuenta_actual = ''
+    moneda_actual = 'ARS'
+    year = None
+
+    # Detectar año
+    m_year = re.search(r'Periodo del Extracto:.*?(\d{4})', texto[:2000])
+    if m_year:
+        year = m_year.group(1)
+    else:
+        m_year2 = re.search(r'20\d{2}', texto[:2000])
+        if m_year2:
+            year = m_year2.group(0)
+
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continue
+
+        # Detectar cuenta
+        m_cuenta = pat_cuenta.search(linea)
+        if m_cuenta:
+            cuenta_actual = m_cuenta.group(1)
+            continue
+
+        # Detectar moneda
+        m_mon = pat_moneda.search(linea)
+        if m_mon:
+            moneda_actual = 'USD' if 'DOLARES' in m_mon.group(1).upper() else 'ARS'
+            continue
+
+        # Saldo anterior
+        m_sal = pat_saldo_ant.search(linea)
+        if m_sal:
+            saldo_prev = limpiar_monto(m_sal.group(1))
+            if cuenta_actual:
+                saldos_por_cuenta[cuenta_actual] = saldo_prev
+            continue
+
+        # Saltar ruido
+        linea_lower = linea.lower()
+        if any(kw in linea_lower for kw in ruido):
+            continue
+        if pat_sep.match(linea):
+            continue
+        if 'sin movimientos' in linea_lower:
+            continue
+
+        # Intentar con 2 montos (referencia + monto)
+        m2 = pat_mov_2m.match(linea)
+        if m2:
+            fecha = m2.group(1)
+            desc_completa = m2.group(2).strip()
+            monto_str = m2.group(3)
+            saldo_str = m2.group(4)
+
+            monto = limpiar_monto(monto_str)
+            saldo = limpiar_monto(saldo_str)
+
+            if monto is not None and saldo is not None:
+                ref_match = re.search(r'\s+(\d{5,})\s*$', desc_completa)
+                referencia = ''
+                if ref_match:
+                    referencia = ref_match.group(1)
+                    desc_limpia = desc_completa[:ref_match.start()].strip()
+                else:
+                    desc_limpia = desc_completa
+
+                tipo = 'D'
+                saldo_ant = saldos_por_cuenta.get(cuenta_actual)
+                if saldo_ant is not None:
+                    delta = round(saldo - saldo_ant, 2)
+                    if abs(delta - monto) < 0.01:
+                        tipo = 'C'
+                    elif abs(delta + monto) < 0.01:
+                        tipo = 'D'
+
+                fecha_completa = fecha
+                if year and '/' in fecha:
+                    parts = fecha.split('/')
+                    if len(parts) == 3 and len(parts[2]) == 2:
+                        fecha_completa = f"{parts[0]}/{parts[1]}/{year}"
+
+                movimientos.append({
+                    'fecha': normalizar_fecha(fecha_completa),
+                    'descripcion': desc_limpia,
+                    'referencia': referencia,
+                    'debito': monto if tipo == 'D' else None,
+                    'credito': monto if tipo == 'C' else None,
+                    'saldo': saldo,
+                    'moneda': moneda_actual,
+                    'tipo': tipo,
+                    'cuenta': cuenta_actual,
+                })
+                saldos_por_cuenta[cuenta_actual] = saldo
+            continue
+
+        # Intentar con 1 monto
+        m1 = pat_mov_1m.match(linea)
+        if m1:
+            fecha = m1.group(1)
+            desc_completa = m1.group(2).strip()
+            monto_str = m1.group(3)
+            saldo_str = m1.group(4)
+
+            monto = limpiar_monto(monto_str)
+            saldo = limpiar_monto(saldo_str)
+
+            if monto is not None and saldo is not None:
+                ref_match = re.search(r'\s+(\d{5,})\s*$', desc_completa)
+                referencia = ''
+                if ref_match:
+                    referencia = ref_match.group(1)
+                    desc_limpia = desc_completa[:ref_match.start()].strip()
+                else:
+                    desc_limpia = desc_completa
+
+                tipo = 'D'
+                saldo_ant = saldos_por_cuenta.get(cuenta_actual)
+                if saldo_ant is not None:
+                    delta = round(saldo - saldo_ant, 2)
+                    if abs(delta - monto) < 0.01:
+                        tipo = 'C'
+                    elif abs(delta + monto) < 0.01:
+                        tipo = 'D'
+
+                fecha_completa = fecha
+                if year and '/' in fecha:
+                    parts = fecha.split('/')
+                    if len(parts) == 3 and len(parts[2]) == 2:
+                        fecha_completa = f"{parts[0]}/{parts[1]}/{year}"
+
+                movimientos.append({
+                    'fecha': normalizar_fecha(fecha_completa),
+                    'descripcion': desc_limpia,
+                    'referencia': referencia,
+                    'debito': monto if tipo == 'D' else None,
+                    'credito': monto if tipo == 'C' else None,
+                    'saldo': saldo,
+                    'moneda': moneda_actual,
+                    'tipo': tipo,
+                    'cuenta': cuenta_actual,
+                })
+                saldos_por_cuenta[cuenta_actual] = saldo
 
     return movimientos
 

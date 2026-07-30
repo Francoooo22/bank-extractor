@@ -242,7 +242,7 @@ def guardar_excel(resultado, ruta):
         # Orden de columnas preferido. 'documento' (nombre del PDF de origen)
         # va siempre al final, a la derecha de todo lo demás, para poder
         # identificar de qué resumen salió cada fila si se combinan varios.
-        cols_preferidas = ['fecha', 'descripcion', 'referencia', 'importe', 'saldo', 'moneda', 'tipo', 'titular', 'raw']
+        cols_preferidas = ['fecha', 'descripcion', 'referencia', 'importe', 'saldo', 'moneda', 'tipo', 'titular', 'cuenta', 'raw']
         cols_existentes = [c for c in cols_preferidas if c in df.columns]
         otras = [c for c in df.columns if c not in cols_preferidas and c != 'documento']
         orden_columnas = cols_existentes + otras
