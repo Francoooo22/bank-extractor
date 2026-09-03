@@ -520,15 +520,18 @@ def extraer_nacion(texto):
     , re.IGNORECASE)
 
     # Líneas a saltar (encabezados/pie de página).
-    # Nota: NO incluye "banco" ni "nacion": esas palabras aparecen también en
-    # movimientos reales ("48HS. BANCOS", "COMIS. CANJE O/BANCOS") y los
-    # descartaba por error. El propio requisito de fecha al inicio de línea
-    # ya filtra el encabezado "BANCO DE LA NACION ARGENTINA".
+    # Nota: NO incluye "banco", "nacion" ni "resumen": esas palabras
+    # aparecen también en movimientos reales ("48HS. BANCOS", "COMIS.
+    # CANJE O/BANCOS", "DB PM/TOT RESUMEN TCORP") y los descartaba por
+    # error. El propio requisito de fecha al inicio de línea ya filtra
+    # los encabezados/pies de página donde SÍ aparecen esas palabras
+    # ("BANCO DE LA NACION ARGENTINA", "RESUMEN DE CUENTA", "FIN DE
+    # RESUMEN"): ninguno de ellos empieza con una fecha DD/MM/YY.
     saltar_re = re.compile(
         r'transporte|saldo\s+anterior|fecha|movimientos|'
         r'comprob|debitos|creditos|saldo\s*$|'
         r'hoja:|cuit|sucursal|cuenta|'
-        r'resumen|cbu|clave|suc:|iva|'
+        r'cbu|clave|suc:|iva|'
         r'pagina|siguiente|clav', re.IGNORECASE
     )
 

@@ -9,6 +9,7 @@ from extractor import (
     normalizar_fecha,
     clasificar_monto,
     detectar_banco,
+    extraer_nacion,
 )
 
 
@@ -173,6 +174,39 @@ class TestDetectarBanco:
 # ─────────────────────────────────────────────
 #  Tests de Integración
 # ─────────────────────────────────────────────
+
+class TestExtraerNacion:
+    """Tests para el parser dedicado de Banco Nación (extraer_nacion)"""
+
+    def test_no_descarta_movimiento_con_resumen_en_la_descripcion(self):
+        """
+        Caso real (Copparoni, resumen 08/2026): el movimiento
+        'DB PM/TOT RESUMEN TCORP' se perdía porque el filtro de ruido
+        descartaba cualquier línea que contuviera la palabra suelta
+        "resumen", pensado para encabezados como "RESUMEN DE CUENTA" o
+        pies de página como "FIN DE RESUMEN" — pero esos nunca empiezan
+        con fecha, así que el filtro por "resumen" era innecesario y
+        además borraba movimientos reales que legítimamente incluyen esa
+        palabra en su descripción.
+        """
+        texto = (
+            "RESUMEN DE CUENTA\n"
+            "SALDO ANTERIOR 8.885.389,76-\n"
+            "20/08/26 DB PM/TOT RESUMEN TCORP 4572 3.353.911,53 12.239.301,29-\n"
+            "000230476 <--- FIN DE RESUMEN\n"
+        )
+
+        movimientos = extraer_nacion(texto)
+
+        assert len(movimientos) == 1
+        mov = movimientos[0]
+        assert mov['descripcion'] == 'DB PM/TOT RESUMEN TCORP'
+        assert mov['referencia'] == '4572'
+        assert mov['tipo'] == 'D'
+        assert mov['debito'] == pytest.approx(3353911.53)
+        assert mov['credito'] is None
+        assert mov['saldo'] == pytest.approx(-12239301.29)
+
 
 class TestIntegracion:
     """Tests que verifican flujos completos"""

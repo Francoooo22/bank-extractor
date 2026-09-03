@@ -2,6 +2,13 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.2.2] - 2026-09-03
+
+### Corregido
+- 🐛 **Parser Nación**: se perdía el movimiento "DB PM/TOT RESUMEN TCORP" (y cualquier otro que incluya la palabra "resumen" en su descripción, p.ej. variantes de "PM/TOT RESUMEN") porque el filtro de líneas de ruido descartaba cualquier línea que contuviera "resumen", pensado para encabezados/pies de página ("RESUMEN DE CUENTA", "FIN DE RESUMEN"). Esas líneas ya se filtran solas por no empezar con fecha, así que se sacó "resumen" del filtro de ruido — mismo tipo de bug que el fix anterior de "banco"/"nacion". Caso real: resumen Copparoni 08/2026, confirmado 199/199 filas contra el Excel corregido a mano.
+
+---
+
 ## [1.2.0] - 2026-07-29
 
 ### Agregado
