@@ -157,9 +157,51 @@ def extraer_movimientos(ruta_pdf: str, banco: str = 'generico') -> dict:
             'titular': titular,
             'paginas': len(paginas_texto),
             'metodo': 'tabla' if todas_tablas and movimientos else 'texto',
+            'saldos': calcular_saldos_por_cuenta(movimientos),
         },
         'texto_muestra': texto_completo[:2000]
     }
+
+
+def calcular_saldos_por_cuenta(movimientos):
+    """
+    Identifica saldo inicial y final por cuenta a partir del campo 'saldo'
+    (saldo corriente) que cada parser ya deja en los movimientos.
+
+    Agrupa por 'cuenta' cuando el parser la distingue (BBVA, Macro); si no,
+    por 'moneda' (separa ARS/USD en ICBC); si tampoco hay moneda, todo cae
+    en un único grupo. El orden de los grupos es el de aparición en el PDF.
+
+    saldo_inicial se despeja del primer movimiento con saldo e importe
+    conocidos (saldo - importe = saldo anterior a ese movimiento), lo que
+    coincide con el "SALDO ANTERIOR"/"SALDO ULTIMO EXTRACTO" que imprimen
+    los bancos cuando el parser pudo leerlo. saldo_final es el saldo del
+    último movimiento del grupo.
+    """
+    grupos = {}
+    orden = []
+
+    for mov in movimientos:
+        clave = mov.get('cuenta') or mov.get('moneda') or ''
+        if clave not in grupos:
+            grupos[clave] = {
+                'cuenta': mov.get('cuenta', ''),
+                'moneda': mov.get('moneda', ''),
+                'saldo_inicial': None,
+                'saldo_final': None,
+            }
+            orden.append(clave)
+
+        grupo = grupos[clave]
+        saldo = mov.get('saldo')
+        importe = mov.get('importe')
+
+        if grupo['saldo_inicial'] is None and saldo is not None and importe is not None:
+            grupo['saldo_inicial'] = round(saldo - importe, 2)
+        if saldo is not None:
+            grupo['saldo_final'] = saldo
+
+    return [grupos[clave] for clave in orden]
 
 
 # ─────────────────────────────────────────────

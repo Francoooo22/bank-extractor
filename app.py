@@ -256,18 +256,31 @@ def guardar_excel(resultado, ruta):
         importes = [float(m.get('importe') or 0) for m in movs]
         total_debitos = sum(i for i in importes if i < 0)
         total_creditos = sum(i for i in importes if i > 0)
-        resumen_data = {
-            'Campo': ['Banco detectado', 'Titular', 'Total movimientos', 'Fecha extracción',
-                      'Débitos (suma)', 'Créditos (suma)'],
-            'Valor': [
-                info.get('banco', 'Desconocido'),
-                info.get('titular', ''),
-                len(movs),
-                datetime.now().strftime('%d/%m/%Y %H:%M'),
-                total_debitos,
-                total_creditos,
-            ]
-        }
+        campos = ['Banco detectado', 'Titular', 'Total movimientos', 'Fecha extracción',
+                  'Débitos (suma)', 'Créditos (suma)']
+        valores = [
+            info.get('banco', 'Desconocido'),
+            info.get('titular', ''),
+            len(movs),
+            datetime.now().strftime('%d/%m/%Y %H:%M'),
+            total_debitos,
+            total_creditos,
+        ]
+
+        saldos = info.get('saldos', [])
+        if len(saldos) == 1:
+            campos += ['Saldo inicial', 'Saldo final']
+            valores += [saldos[0]['saldo_inicial'], saldos[0]['saldo_final']]
+        else:
+            for i, grupo in enumerate(saldos, start=1):
+                identificador = grupo.get('cuenta') or grupo.get('moneda') or ''
+                etiqueta = f"Cuenta {i}" + (f" - {identificador}" if identificador else "")
+                campos.append(f"Saldo inicial ({etiqueta})")
+                valores.append(grupo['saldo_inicial'])
+                campos.append(f"Saldo final ({etiqueta})")
+                valores.append(grupo['saldo_final'])
+
+        resumen_data = {'Campo': campos, 'Valor': valores}
         pd.DataFrame(resumen_data).to_excel(writer, sheet_name='Resumen', index=False)
 
         # Formatear columnas en Movimientos
