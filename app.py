@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from extractor import extraer_movimientos
 from extractor_seguros import extraer_resumen_seguros, exportar_excel
+from categorizador import categorizar
 
 # ─────────────────────────────────────────────
 #  CONFIGURACIÓN DE LOGGING
@@ -231,6 +232,35 @@ def preview_texto():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/analisis')
+def analisis_index():
+    return render_template('analisis.html')
+
+
+@app.route('/analisis/combinar', methods=['POST'])
+def analisis_combinar():
+    archivos = request.files.getlist('archivos')
+    if not archivos:
+        logger.warning("❌ POST /analisis/combinar: sin archivos")
+        return jsonify({'error': 'No se recibió ningún archivo'}), 400
+
+    movimientos, resumen, errores_archivos = combinar_excels(archivos)
+
+    if not movimientos:
+        logger.warning(f"⚠️  /analisis/combinar sin movimientos válidos: {errores_archivos}")
+        return jsonify({
+            'error': 'No se encontraron movimientos en los archivos subidos',
+            'errores_archivos': errores_archivos
+        }), 422
+
+    logger.info(f"📊 /analisis/combinar: {len(movimientos)} movimientos de {len(archivos)} archivo(s)")
+    return jsonify({
+        'movimientos': movimientos,
+        'resumen': resumen,
+        'errores_archivos': errores_archivos
+    })
+
+
 def guardar_excel(resultado, ruta):
     movs = resultado['movimientos']
     info = resultado.get('info', {})
@@ -288,6 +318,53 @@ def guardar_excel(resultado, ruta):
         for col in ws.columns:
             max_len = max(len(str(cell.value or '')) for cell in col)
             ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+
+
+COLUMNAS_REQUERIDAS_ANALISIS = {'fecha', 'descripcion', 'importe', 'tipo'}
+
+
+def combinar_excels(archivos):
+    """Lee la hoja 'Movimientos' de cada archivo .xlsx, concatena y categoriza.
+
+    Devuelve (movimientos, resumen, errores_archivos). Un archivo inválido
+    no aborta el resto: se agrega su motivo a errores_archivos y se sigue.
+    """
+    dataframes = []
+    errores_archivos = []
+
+    for archivo in archivos:
+        try:
+            df = pd.read_excel(archivo, sheet_name='Movimientos')
+        except Exception:
+            errores_archivos.append(f"'{archivo.filename}': no es un Excel válido generado por esta app")
+            continue
+
+        faltantes = COLUMNAS_REQUERIDAS_ANALISIS - set(df.columns)
+        if faltantes:
+            errores_archivos.append(f"'{archivo.filename}': faltan columnas {', '.join(sorted(faltantes))}")
+            continue
+
+        dataframes.append(df)
+
+    if not dataframes:
+        return [], {}, errores_archivos
+
+    combinado = pd.concat(dataframes, ignore_index=True, sort=False)
+    combinado['categoria'] = combinado.apply(
+        lambda fila: categorizar(fila.get('descripcion', ''), fila.get('tipo', '')),
+        axis=1
+    )
+
+    resumen_df = combinado.groupby('categoria')['importe'].agg(['count', 'sum'])
+    resumen = {
+        categoria: {'cantidad': int(fila['count']), 'total': float(fila['sum'])}
+        for categoria, fila in resumen_df.iterrows()
+    }
+
+    combinado = combinado.astype(object).where(pd.notnull(combinado), None)
+    movimientos = combinado.to_dict('records')
+
+    return movimientos, resumen, errores_archivos
 
 
 if __name__ == '__main__':
