@@ -2,6 +2,13 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.3.0] - 2026-09-23
+
+### Agregado
+- ✨ Vista `/analisis` — combina varios Excels ya procesados, categoriza movimientos (transferencias, gastos bancarios, impuestos, servicios, efectivo) con gráfico de composición, modal de detalle por categoría con recategorización manual, y exporta un Excel con una hoja por categoría.
+
+---
+
 ## [1.2.2] - 2026-09-03
 
 ### Corregido
