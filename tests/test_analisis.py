@@ -1,9 +1,11 @@
 """Tests para las rutas de análisis de resúmenes (/analisis/*)"""
 
 import io
+import os
 import tempfile
 import pandas as pd
 import pytest
+from openpyxl import load_workbook
 from app import app
 
 
@@ -110,3 +112,32 @@ class TestAnalisisCombinar:
         data = {'archivos': [(buffer, 'invalido.xlsx')]}
         response = client.post('/analisis/combinar', data=data, content_type='multipart/form-data')
         assert response.status_code == 422
+
+
+class TestAnalisisExportar:
+    def test_sin_movimientos(self, client):
+        response = client.post('/analisis/exportar', json={'movimientos': []})
+        assert response.status_code == 400
+
+    def test_exporta_una_hoja_por_categoria_no_vacia(self, client):
+        movimientos = [
+            {"fecha": "05/01/2026", "descripcion": "TRANSFERENCIA RECIBIDA JUAN",
+             "importe": 1000.0, "tipo": "C", "categoria": "Transferencias recibidas"},
+            {"fecha": "10/01/2026", "descripcion": "COMISION MANTENIMIENTO",
+             "importe": -50.0, "tipo": "D", "categoria": "Gastos bancarios / aranceles"},
+        ]
+        response = client.post('/analisis/exportar', json={'movimientos': movimientos})
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body['ok'] is True
+
+        ruta = os.path.join(app.config['OUTPUT_FOLDER'], body['archivo'])
+        assert os.path.exists(ruta)
+
+        wb = load_workbook(ruta)
+        assert 'Resumen' in wb.sheetnames
+        assert 'Transferencias recibidas' in wb.sheetnames
+        assert 'Gastos bancarios' in wb.sheetnames  # nombre corto por límite de 31 chars
+        # Categorías sin movimientos no deben generar hoja:
+        assert 'Impuestos' not in wb.sheetnames
+        assert 'Otros debitos' not in wb.sheetnames

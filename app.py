@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from extractor import extraer_movimientos
 from extractor_seguros import extraer_resumen_seguros, exportar_excel
-from categorizador import categorizar
+from categorizador import categorizar, CATEGORIAS
 
 # ─────────────────────────────────────────────
 #  CONFIGURACIÓN DE LOGGING
@@ -365,6 +365,64 @@ def combinar_excels(archivos):
     movimientos = combinado.to_dict('records')
 
     return movimientos, resumen, errores_archivos
+
+
+NOMBRES_HOJA = {
+    'Transferencias recibidas': 'Transferencias recibidas',
+    'Transferencias emitidas': 'Transferencias emitidas',
+    'Gastos bancarios / aranceles': 'Gastos bancarios',
+    'Impuestos': 'Impuestos',
+    'Pagos de servicios': 'Pagos de servicios',
+    'Extracciones / Depósitos efectivo': 'Extracciones-Depositos',
+    'Otros débitos': 'Otros debitos',
+    'Otros créditos': 'Otros creditos',
+}
+
+COLUMNAS_HOJA_CATEGORIA = ['fecha', 'descripcion', 'referencia', 'importe', 'saldo',
+                            'moneda', 'tipo', 'titular', 'cuenta', 'documento']
+
+
+def exportar_analisis_excel(movimientos, ruta):
+    """Genera el Excel de análisis: hoja Resumen + una hoja por categoría con movimientos."""
+    df = pd.DataFrame(movimientos)
+
+    resumen_filas = []
+    total_general = 0.0
+    for categoria in CATEGORIAS:
+        subset = df[df['categoria'] == categoria] if 'categoria' in df.columns else df.iloc[0:0]
+        cantidad = len(subset)
+        total = float(subset['importe'].sum()) if cantidad else 0.0
+        resumen_filas.append({'Categoría': categoria, 'Cantidad': cantidad, 'Total': total})
+        total_general += total
+    resumen_filas.append({'Categoría': 'TOTAL GENERAL', 'Cantidad': len(df), 'Total': total_general})
+
+    with pd.ExcelWriter(ruta, engine='openpyxl') as writer:
+        pd.DataFrame(resumen_filas).to_excel(writer, sheet_name='Resumen', index=False)
+
+        for categoria in CATEGORIAS:
+            subset = df[df['categoria'] == categoria] if 'categoria' in df.columns else df.iloc[0:0]
+            if subset.empty:
+                continue
+            columnas = [c for c in COLUMNAS_HOJA_CATEGORIA if c in subset.columns]
+            subset[columnas].to_excel(writer, sheet_name=NOMBRES_HOJA[categoria], index=False)
+
+
+@app.route('/analisis/exportar', methods=['POST'])
+def analisis_exportar():
+    data = request.get_json(silent=True) or {}
+    movimientos = data.get('movimientos')
+
+    if not movimientos:
+        logger.warning("❌ POST /analisis/exportar: sin movimientos")
+        return jsonify({'error': 'No se recibieron movimientos para exportar'}), 400
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    nombre_excel = f"analisis_{timestamp}.xlsx"
+    ruta_excel = os.path.join(app.config['OUTPUT_FOLDER'], nombre_excel)
+    exportar_analisis_excel(movimientos, ruta_excel)
+
+    logger.info(f"📊 Excel de análisis generado: {nombre_excel} ({len(movimientos)} movimientos)")
+    return jsonify({'ok': True, 'archivo': nombre_excel})
 
 
 if __name__ == '__main__':
