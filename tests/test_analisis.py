@@ -87,6 +87,21 @@ class TestAnalisisCombinar:
         assert len(body['errores_archivos']) == 1
         assert 'invalido.xlsx' in body['errores_archivos'][0]
 
+    def test_archivo_no_es_excel_no_aborta_los_demas(self, client):
+        data = {
+            'archivos': [
+                (io.BytesIO(_excel_bytes(MOVS_ENERO)), 'enero.xlsx'),
+                (io.BytesIO(b"not an excel file"), 'roto.xlsx'),
+            ]
+        }
+        response = client.post('/analisis/combinar', data=data, content_type='multipart/form-data')
+        assert response.status_code == 200
+        body = response.get_json()
+
+        assert len(body['movimientos']) == 2  # solo enero.xlsx
+        assert len(body['errores_archivos']) == 1
+        assert 'roto.xlsx' in body['errores_archivos'][0]
+
     def test_ningun_archivo_valido_devuelve_422(self, client):
         buffer = io.BytesIO()
         pd.DataFrame({"columna_random": [1, 2]}).to_excel(buffer, sheet_name='Movimientos', index=False)
