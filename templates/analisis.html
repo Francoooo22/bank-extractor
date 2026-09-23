@@ -497,8 +497,19 @@
       return;
     }
     div.style.display = 'block';
-    div.innerHTML = '<strong>No se pudieron procesar:</strong><ul>' +
-      errores.map(e => `<li>${e}</li>`).join('') + '</ul>';
+    div.replaceChildren();
+
+    const strong = document.createElement('strong');
+    strong.textContent = 'No se pudieron procesar:';
+    div.appendChild(strong);
+
+    const ul = document.createElement('ul');
+    for (const error of errores) {
+      const li = document.createElement('li');
+      li.textContent = error;
+      ul.appendChild(li);
+    }
+    div.appendChild(ul);
   }
 
   function renderizarGrafico() {
