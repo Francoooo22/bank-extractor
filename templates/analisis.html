@@ -544,10 +544,18 @@
     });
 
     const tbody = document.getElementById('tabla-resumen-body');
-    tbody.innerHTML = '';
+    tbody.replaceChildren();
     for (const cat of categorias) {
       const fila = document.createElement('tr');
-      fila.innerHTML = `<td>${cat}</td><td>${resumen[cat].cantidad}</td><td>${resumen[cat].total.toFixed(2)}</td>`;
+
+      const tdCat = document.createElement('td');
+      tdCat.textContent = cat;
+      const tdCant = document.createElement('td');
+      tdCant.textContent = resumen[cat].cantidad;
+      const tdTot = document.createElement('td');
+      tdTot.textContent = resumen[cat].total.toFixed(2);
+      fila.replaceChildren(tdCat, tdCant, tdTot);
+
       fila.onclick = () => abrirModalCategoria(cat);
       tbody.appendChild(fila);
     }
