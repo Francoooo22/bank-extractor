@@ -350,6 +350,50 @@
     }
 
     #resultado { display: none; flex-direction: column; gap: 20px; }
+
+    /* ── MODAL DE CATEGORÍA ── */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal-contenido {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 900px;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .modal-cerrar {
+      position: absolute;
+      top: 1rem; right: 1rem;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+
+    .tabla-modal {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+
+    .tabla-modal th, .tabla-modal td {
+      padding: 0.5rem 0.8rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
@@ -436,8 +480,36 @@
 
 </div>
 
+<!-- MODAL DE DETALLE POR CATEGORÍA -->
+<div id="modal-categoria" class="modal-overlay" style="display:none">
+  <div class="modal-contenido">
+    <button class="modal-cerrar" onclick="cerrarModal()">✕</button>
+    <h2 id="modal-titulo"></h2>
+    <table class="tabla-modal">
+      <thead>
+        <tr><th>Fecha</th><th>Descripción</th><th>Importe</th><th>Documento</th><th>Categoría</th></tr>
+      </thead>
+      <tbody id="modal-tabla-body"></tbody>
+    </table>
+    <p id="modal-total"></p>
+  </div>
+</div>
+
 <script src="/static/vendor/chart.umd.min.js"></script>
 <script>
+  // Mismo orden que CATEGORIAS en categorizador.py — si se edita esa lista en
+  // Python, hay que reflejar el cambio acá también.
+  const CATEGORIAS_JS = [
+    'Transferencias recibidas',
+    'Transferencias emitidas',
+    'Gastos bancarios / aranceles',
+    'Impuestos',
+    'Pagos de servicios',
+    'Extracciones / Depósitos efectivo',
+    'Otros débitos',
+    'Otros créditos',
+  ];
+
   let movimientos = [];
   let resumen = {};
   let grafico = null;
@@ -561,9 +633,66 @@
     }
   }
 
-  // Task 6 reemplaza este stub por el modal real de detalle de categoría.
+  let categoriaModalActual = null;
+
   function abrirModalCategoria(categoria) {
-    console.log('Categoría clickeada:', categoria);
+    categoriaModalActual = categoria;
+    document.getElementById('modal-titulo').textContent = categoria;
+    document.getElementById('modal-categoria').style.display = 'flex';
+    renderizarTablaModal();
+  }
+
+  function renderizarTablaModal() {
+    const filtrados = movimientos.filter(m => m.categoria === categoriaModalActual);
+    const tbody = document.getElementById('modal-tabla-body');
+    tbody.replaceChildren();
+
+    let total = 0;
+    filtrados.forEach((mov) => {
+      total += mov.importe;
+      const idx = movimientos.indexOf(mov);
+
+      const tdFecha = document.createElement('td');
+      tdFecha.textContent = mov.fecha ?? '';
+
+      const tdDescripcion = document.createElement('td');
+      tdDescripcion.textContent = mov.descripcion ?? '';
+
+      const tdImporte = document.createElement('td');
+      tdImporte.textContent = mov.importe.toFixed(2);
+
+      const tdDocumento = document.createElement('td');
+      tdDocumento.textContent = mov.documento ?? '';
+
+      const select = document.createElement('select');
+      for (const cat of CATEGORIAS_JS) {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        if (cat === mov.categoria) option.selected = true;
+        select.appendChild(option);
+      }
+      select.addEventListener('change', () => recategorizar(idx, select.value));
+
+      const tdCategoria = document.createElement('td');
+      tdCategoria.appendChild(select);
+
+      const fila = document.createElement('tr');
+      fila.replaceChildren(tdFecha, tdDescripcion, tdImporte, tdDocumento, tdCategoria);
+      tbody.appendChild(fila);
+    });
+
+    document.getElementById('modal-total').textContent = `Total: ${total.toFixed(2)} (${filtrados.length} movimientos)`;
+  }
+
+  function recategorizar(indexMovimiento, nuevaCategoria) {
+    movimientos[indexMovimiento].categoria = nuevaCategoria;
+    renderizarTablaModal();
+  }
+
+  function cerrarModal() {
+    document.getElementById('modal-categoria').style.display = 'none';
+    renderizarGrafico();
   }
 
   async function exportarExcel() {
