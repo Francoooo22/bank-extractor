@@ -2,6 +2,20 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.4.0] - 2026-09-29
+
+### Agregado
+- ✨ **Versión portable offline** (PyInstaller): carpeta `BankExtractor/` con `.exe` para Windows (y binario Linux), sin instalar Python ni necesitar internet. Ver README → "Versión portable".
+- ✨ `BankExtractor.spec`, `build_windows.bat` y `build_linux.sh` para construir el paquete.
+- ✨ Workflow de GitHub Actions `Build Windows portable` (`.github/workflows/build-windows.yml`): construye el `.exe` en `windows-latest`, disparable a mano (Actions → Run workflow) o con tags `v*`; deja la carpeta como artefacto `BankExtractor-windows`.
+
+### Cambiado
+- Fuentes DM Sans / DM Mono embebidas en `static/` (antes se cargaban de Google Fonts).
+- `app.py`: en modo empaquetado, `uploads/`, `outputs/` y `bank_extractor.log` van junto al ejecutable; templates y static dentro del bundle.
+- `lanzar.py`: no ejecuta `pip` si está empaquetado y busca el primer puerto libre desde 5000 (antes fallaba o abría otra app si el 5000 estaba ocupado).
+
+---
+
 ## [1.3.0] - 2026-09-23
 
 ### Agregado
