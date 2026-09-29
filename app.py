@@ -5,6 +5,7 @@ Aplicación local Flask para procesar PDFs bancarios
 
 import os
 import re
+import sys
 import json
 import logging
 import pdfplumber
@@ -20,19 +21,29 @@ from categorizador import categorizar, CATEGORIAS
 #  CONFIGURACIÓN DE LOGGING
 # ─────────────────────────────────────────────
 
+# Rutas: en el ejecutable (PyInstaller) los recursos van dentro del bundle
+# y los datos del usuario (uploads, outputs, log) al lado del .exe.
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+    RECURSOS_DIR = sys._MEIPASS
+else:
+    BASE_DIR = RECURSOS_DIR = os.path.dirname(os.path.abspath(__file__))
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('bank_extractor.log')
+        logging.FileHandler(os.path.join(BASE_DIR, 'bank_extractor.log'), encoding='utf-8')
     ]
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['OUTPUT_FOLDER'] = 'outputs'
+app = Flask(__name__,
+            template_folder=os.path.join(RECURSOS_DIR, 'templates'),
+            static_folder=os.path.join(RECURSOS_DIR, 'static'))
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
+app.config['OUTPUT_FOLDER'] = os.path.join(BASE_DIR, 'outputs')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max
 app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
 app.config['CLEANUP_HOURS'] = 24  # Limpiar archivos de +24h

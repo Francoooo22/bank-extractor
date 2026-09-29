@@ -24,9 +24,20 @@ DEPENDENCIAS = [
 PUERTO = 5000
 
 
+def puerto_libre(inicio=PUERTO, intentos=50):
+    """Primer puerto libre desde `inicio` (el 5000 suele estar ocupado)."""
+    for p in range(inicio, inicio + intentos):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(('127.0.0.1', p)) != 0:
+                return p
+    raise RuntimeError('No hay puertos libres disponibles')
+
+
 # ── 1. Instalar dependencias faltantes ──────────────────────────────────────
 
 def instalar_si_falta():
+    if getattr(sys, 'frozen', False):
+        return  # ejecutable: ya trae todo, no hay pip
     faltantes = []
     for modulo, paquete in DEPENDENCIAS:
         try:
@@ -62,7 +73,7 @@ def abrir_navegador(puerto):
     if esperar_puerto(puerto):
         webbrowser.open(f'http://localhost:{puerto}')
     else:
-        print("⚠️  No se pudo confirmar que Flask arrancó. Abrí http://localhost:5000 manualmente.")
+        print(f"⚠️  No se pudo confirmar que Flask arrancó. Abrí http://localhost:{puerto} manualmente.")
 
 
 # ── MAIN ─────────────────────────────────────────────────────────────────────
@@ -99,14 +110,15 @@ if __name__ == '__main__':
 
     # Importar la app Flask (después de instalar)
     from app import app
+    PUERTO = puerto_libre()
 
     # Hilo que abre el navegador en cuanto Flask responda
     t = threading.Thread(target=abrir_navegador, args=(PUERTO,), daemon=True)
     t.start()
 
     print(f"\n🚀 Servidor corriendo en http://localhost:{PUERTO}")
-    print("   📋  Extractor Bancario: http://localhost:5000")
-    print("   🛡️   Extractor Seguros:  http://localhost:5000/seguros")
+    print(f"   📋  Extractor Bancario: http://localhost:{PUERTO}")
+    print(f"   🛡️   Extractor Seguros:  http://localhost:{PUERTO}/seguros")
     print("   Cerrá esta ventana para detener la aplicación.\n")
 
     # Arrancar Flask (bloquea hasta que se cierre la ventana)

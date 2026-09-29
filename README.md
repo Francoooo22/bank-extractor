@@ -282,3 +282,14 @@ Instaladas automáticamente via `pip install -r requirements.txt`
 ---
 
 **¿Preguntas?** Abre un [Issue](https://github.com/Francoooo22/bank-extractor/issues) o [Discussion](https://github.com/Francoooo22/bank-extractor/discussions) 🚀
+
+## Versión portable (sin internet, sin instalar Python)
+
+Se empaqueta con PyInstaller como una carpeta `dist/BankExtractor/`.
+- **Windows:** en una PC con Python 3.10+, doble clic en `build_windows.bat` → `dist\BankExtractor\BankExtractor.exe`.
+- **Linux:** `./build_linux.sh` → `dist/BankExtractor/BankExtractor`.
+- Internet solo se necesita para construir. Se comprime la carpeta en un ZIP y se comparte.
+- El usuario abre `BankExtractor.exe`: se abre el navegador en `localhost` (busca un puerto libre desde el 5000).
+  Cerrar la ventana negra detiene la app. Los Excel salen en `outputs/`, al lado del ejecutable.
+- Las fuentes están embebidas en `static/`, no usa CDN ni servicios externos.
+- Un ejecutable solo corre en el sistema donde se construyó (el de Windows se construye en Windows).
