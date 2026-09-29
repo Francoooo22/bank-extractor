@@ -1,0 +1,21 @@
+name: Build Windows portable
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install flask pdfplumber pandas openpyxl pyinstaller
+      - run: pyinstaller BankExtractor.spec --noconfirm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BankExtractor-windows
+          path: dist/BankExtractor
