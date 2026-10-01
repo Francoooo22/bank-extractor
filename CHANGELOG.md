@@ -2,6 +2,24 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [1.4.1] - 2026-10-01
+
+### Corregido
+- 🐛 **Parser Santander** — el parser leía el resumen de cuenta en el orden equivocado. Reescrito para reagrupar las líneas del PDF en filas lógicas antes de interpretarlas, porque la columna **Fecha** va en un bloque x distinto y queda desalineada del resto de la fila: en el texto plano aparece suelta, *después* de la línea principal. Antes se procesaba línea por línea y eso rompía tres cosas:
+  - **Todos los débitos se clasificaban como créditos.** Santander imprime el importe *sin signo* en las columnas Débito y Crédito, así que el código solo miraba el signo del número (siempre vacío) y caía en "sin signo = crédito". Ahora la dirección se deriva del **delta del saldo que imprime el banco** (`saldo_actual = saldo_anterior ± importe`), igual que el parser Nación. Hace falta porque la descripción miente: `"Impuesto ley 25.413 credito 0,6%"` es un débito cuando el saldo baja, y `"Echeq clearing recibido 48hs"` también es un débito.
+  - **"Saldo Inicial" se emitía como un movimiento más** con tipo `C`, inflando el total de créditos y rompiendo la conciliación. Ahora es el saldo de apertura de la cuenta (y la hoja Resumen lo reporta bien).
+  - **Se perdían movimientos de las primeras filas.** El filtro de ruido descartaba por palabra clave `'comision'`, `'iva 21%'`, `'regimen de recaudacion'` y `'resp:'` — que son justamente los conceptos de los primeros movimientos (`Comision transf otros bcos canales`, `Iva 21% reg de transfisc ley27743`, `Regimen de recaudacion sircreb c`) y de todas las filas `Impuesto ley 25.413`. El filtro se reemplazó por un criterio estructural: una línea es fila solo si tiene **dos montos o más** (último = saldo, penúltimo = importe), lo que además descarta como movimiento las trampas que tienen un único monto disfrazado de importe (`Resp:... 0,10% sobre $1.203.371,18`, `Total Retención ... SIRCREB $ 1.203,37`) y deja de colarse texto legal al final del PDF.
+  - Las líneas sin importe (`Pago de anahi lilian roman / 30674222`, `Cta orig: ... base impo. usd 2.040,00`) ahora se anexan a la descripción del movimiento al que pertenecen, en vez de perderse o generar filas sueltas.
+- 🐛 **Parser Santander**: el "Saldo Inicial" negativo (`-$ 38.126.749,24`) se leía sin signo, así que en los resúmenes con saldo en contra la cadena de saldos arrancaba corrida y no cerraba ni un solo movimiento.
+
+### Agregado
+- 🧪 10 tests de regresión del parser Santander (`TestSantander`), con una corrida contigua real de un resumen de ago-2026: saldo inicial que no es movimiento, primeras filas con la fecha desalineada, débitos que no se leen como créditos, contradicciones entre descripción y saldo, cierre de la cadena de saldos y descripciones con continuaciones.
+
+### Verificado
+- Los 8 resúmenes Santander de 2026 de Aramendi (ene-ago) reconcilian **al centavo**: `saldo inicial + débitos - créditos == saldo final impreso` en los 2063 movimientos, 0 discrepancias, y el saldo final de cada mes es exactamente el saldo inicial del mes siguiente.
+
+---
+
 ## [1.4.0] - 2026-09-29
 
 ### Agregado

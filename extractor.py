@@ -409,120 +409,200 @@ def extraer_de_texto(texto, banco):
 
 def extraer_santander(texto):
     """
-    Parser dedicado para resúmenes Santander.
-    Cada línea con montos es un movimiento independiente.
-    Formato: [DD/MM/YY] [comprobante] Descripción $ monto $ saldo
-    Negativos: -$ monto. USD: U$S monto.
+    Parser dedicado para resúmenes Santander (Cuenta Corriente / Caja de Ahorro).
+
+    El resumen imprime una tabla con columnas
+    Fecha | Comprobante | Movimiento | Débito | Crédito | Saldo en cuenta,
+    pero al extraer el texto la columna Fecha se desalinea del resto de la fila
+    (va en un bloque x distinto y queda centrada verticalmente en las filas de
+    dos o tres líneas), así que en el texto plano la fecha aparece:
+
+      - en la misma línea de la fila (filas de una sola línea), o
+      - en una línea suelta DESPUÉS de la línea principal de la fila,
+        antes de su continuación de descripción.
+
+    Además, las filas cuya descripción ocupa dos o tres líneas dejan la fecha
+    y el comprobante en líneas separadas del resto. Por eso el parser no
+    puede trabajar línea por línea: primero reagrupa las líneas en filas
+    lógicas y recién después interpreta cada fila.
+
+    Dos reglas sostienen la reagrupación:
+
+      1. Una línea es "línea principal de fila" solo si tiene DOS montos o más.
+         El último monto es el saldo en cuenta y el penúltimo el importe del
+         movimiento. Las líneas de continuación nunca tienen dos montos, y las
+         trampas más frecuentes son justamente las que tienen uno solo y lo
+         presentan como si fuera un importe ("Resp:... / 0,10% sobre
+         $1.203.371,18", "Cta orig: 068-017995/7 - base impo. usd 2.040,00",
+         "Total Retención Régimen de Recaudación SIRCREB $ 1.203,37"), así que
+         la regla las descarta como movimiento y las deja como continuación.
+
+      2. "Saldo Inicial" no es un movimiento: es el saldo de apertura de la
+         cuenta. Antes se emitía como una fila más con tipo 'C', lo que
+         inflaba el total de créditos y rompía la conciliación. Ahora se usa
+         como saldo de arrastre para clasificar el resto.
+
+    Clasificación débito/crédito: se deriva del propio saldo informado por el
+    banco (saldo_actual = saldo_anterior ± importe), nunca del texto de la
+    descripción ni del signo del número. Santander imprime el importe sin
+    signo en las columnas Débito y Crédito, así que el signo no sirve; y la
+    descripción miente: "Impuesto ley 25.413 credito 0,6%" es un DÉBITO
+    cuando el saldo baja. Solo si no se puede resolver por saldo (falta el
+    saldo anterior o hay ambigüedad) se recurre al signo explícito y, en
+    último caso, a las palabras clave de clasificar_monto().
     """
+    EPS = 0.01
+
     movimientos = []
     lineas = texto.split('\n')
 
-    pat_fecha = re.compile(r'^(\d{2}/\d{2}/\d{2})\s')
-    pat_monto_pesos = re.compile(r'(-?)[$]\s*([\d.,]+)')
-    pat_monto_usd = re.compile(r'(-?)U[$]S\s*([\d.,]+)')
+    # Encabezado de la tabla de movimientos: reaparece al inicio de cada página
+    pat_encabezado = re.compile(
+        r'fecha\s+comprobante\s+movimiento\s+d[eé]bito\s+cr[eé]dito\s+saldo',
+        re.IGNORECASE
+    )
+    # "Movimientos en pesos" / "Movimientos en dólares": arranque de sección
+    pat_seccion = re.compile(r'movimientos\s+en\s+(pesos|d[oó]lares)', re.IGNORECASE)
+    # Pies de sección: lo que viene después ya no son movimientos
+    pat_fin_seccion = re.compile(
+        r'saldo\s+total|detalle\s+impositivo|'
+        r'tasas\s+de\s+acuerdos|unidad\s+de\s+informaci|condici[oó]n\s+mipyme|'
+        r'fondos\s+comunes|los\s+dep[oó]sitos\s+en\s+pesos|'
+        r'salvo\s+error|^\s*\d{1,2}\s*-\s*\d{1,2}\s*$',
+        re.IGNORECASE
+    )
+    pat_fecha = re.compile(r'^(\d{2}/\d{2}/\d{2})(?:\s+(.*))?$')
+    pat_monto = re.compile(r'(-?)\$\s*([\d.,]+)')
+    pat_saldo_inicial = re.compile(r'saldo\s+inicial', re.IGNORECASE)
+    pat_comprobante = re.compile(r'^(\d{3,9})\s+(\S.*)$')
+    pat_moneda = re.compile(r'^\s*U\s*\$?\s*S\b|^US\$', re.IGNORECASE)
 
-    en_seccion_pesos = True
-    fecha_actual = None
+    dentro = False
+    moneda = 'ARS'
+    saldo_anterior = None      # saldo de arrastre para clasificar débito/crédito
+    fecha_anticipada = None    # fecha suelta que corresponde a la fila siguiente
+    fila_actual = None         # última fila agregada, para anexarle continuaciones
 
-    for linea in lineas:
-        linea = linea.strip()
-        if not linea or len(linea) < 5:
+    for linea_raw in lineas:
+        linea = linea_raw.strip()
+        if not linea:
             continue
 
-        linea_lower = linea.lower()
-
-        if 'movimientos en dólares' in linea_lower or 'movimientos en dolares' in linea_lower:
-            en_seccion_pesos = False
+        # ── Control de sección ──────────────────────────────────────
+        m_seccion = pat_seccion.search(linea)
+        if m_seccion:
+            dentro = True
+            moneda = 'USD' if 'd' in m_seccion.group(1).lower() else 'ARS'
+            saldo_anterior = None
+            fecha_anticipada = None
+            fila_actual = None
             continue
 
-        if any(kw in linea_lower for kw in [
-            'detalle impositivo', 'tarjeta de débito', 'tarjeta de debito',
-            'tipo de impuesto', 'totales de retencion', 'así usaste tu dinero',
-            'compras en el período', 'pagos en el período', 'pagos totales',
-            'monto total', 'total en pesos', 'total en dólares',
-            'fecha comprobante movimiento', 'caja de ahorro',
-            'cuenta corriente', 'saldo en cuenta', 'saldo total',
-            'período', 'desde:', 'hasta:', 'mi resumen',
-            'tarjetas', 'superclub', 'banco santander',
-            'consumidor final', 'cbu:', 'cuit:', 'cuenta ',
-            'importes en', 'impuesto ley', 'iva 21%',
-            'comision', 'regimen de recaudacion',
-            'pago interes', 'seguro de vida',
-            'resp:', 'débito',
-        ]):
+        if pat_encabezado.search(linea):
+            dentro = True
             continue
 
-        # Elegir patrón según sección
-        pat_monto = pat_monto_pesos if en_seccion_pesos else pat_monto_usd
-        montos_matches = list(pat_monto.finditer(linea))
-
-        if not montos_matches:
+        if not dentro:
             continue
 
-        # Detectar fecha
-        match_fecha = pat_fecha.match(linea)
-        if match_fecha:
-            fecha_actual = match_fecha.group(1)
-            resto = linea[match_fecha.end():]
-            montos_matches = list(pat_monto.finditer(resto))
-            primer_monto = montos_matches[0] if montos_matches else None
-            if primer_monto:
-                desc_raw = resto[:primer_monto.start()].strip()
+        if pat_fin_seccion.search(linea):
+            dentro = False
+            fila_actual = None
+            continue
+
+        # ── Saldo inicial: no es un movimiento ──────────────────────
+        if pat_saldo_inicial.search(linea):
+            montos_ini = pat_monto.findall(linea)
+            if montos_ini:
+                signo_ini, valor_ini = montos_ini[-1]
+                saldo_anterior = limpiar_monto(valor_ini)
+                # El saldo de apertura puede venir negativo ("Saldo Inicial
+                # -$ 38.126.749,24"): sin el signo, la cadena de saldos
+                # arranca corrida y no cierra ningún movimiento posterior.
+                if saldo_anterior is not None and signo_ini == '-':
+                    saldo_anterior = -abs(saldo_anterior)
+            continue
+
+        # ── Fecha al inicio de la línea (con o sin contenido) ───────
+        m_fecha = pat_fecha.match(linea)
+        fecha_linea = m_fecha.group(1) if m_fecha else None
+        resto = (m_fecha.group(2) or '').strip() if m_fecha else linea
+
+        montos = list(pat_monto.finditer(resto))
+
+        # ── Línea principal de fila: al menos 2 montos ───────────────
+        if len(montos) >= 2:
+            m_saldo = montos[-1]
+            m_mov = montos[-2]
+
+            desc_raw = resto[:m_mov.start()].strip()
+
+            saldo = limpiar_monto(m_saldo.group(2))
+            if saldo is not None and m_saldo.group(1) == '-':
+                saldo = -abs(saldo)
+
+            monto = limpiar_monto(m_mov.group(2))
+            if monto is not None and m_mov.group(1) == '-':
+                monto = -abs(monto)
+            signo_explicito = m_mov.group(1) == '-'
+
+            if monto is None or not desc_raw:
+                continue
+
+            # Comprobante: número suelto al inicio de la descripción
+            referencia = ''
+            m_comp = pat_comprobante.match(desc_raw)
+            if m_comp:
+                referencia = m_comp.group(1)
+                desc_raw = m_comp.group(2).strip()
+
+            # La sección de dólares imprime "U$S" pegado a la descripción
+            desc_raw = pat_moneda.sub('', desc_raw).strip()
+
+            # ── Clasificación por delta de saldo ────────────────────
+            es_credito = None
+            if saldo_anterior is not None and saldo is not None:
+                delta = round(saldo - saldo_anterior, 2)
+                if abs(delta - abs(monto)) < EPS and abs(delta + abs(monto)) >= EPS:
+                    es_credito = True
+                elif abs(delta + abs(monto)) < EPS and abs(delta - abs(monto)) >= EPS:
+                    es_credito = False
+
+            if es_credito is None:
+                if signo_explicito:
+                    es_credito = False
+                else:
+                    _, c_fallback = clasificar_monto(m_mov.group(2), abs(monto), desc_raw)
+                    es_credito = c_fallback is not None
+
+            if saldo is not None:
+                saldo_anterior = saldo
+
+            fila_actual = {
+                'fecha': normalizar_fecha(fecha_linea or fecha_anticipada or ''),
+                'descripcion': desc_raw,
+                'referencia': referencia,
+                'debito': None if es_credito else abs(monto),
+                'credito': abs(monto) if es_credito else None,
+                'saldo': saldo,
+                'moneda': moneda,
+                'tipo': 'C' if es_credito else 'D',
+            }
+            movimientos.append(fila_actual)
+            fecha_anticipada = None
+            continue
+
+        # ── Fecha suelta: pertenece a la fila abierta, si aún no tiene ──
+        if fecha_linea:
+            if fila_actual is not None and not fila_actual['fecha']:
+                fila_actual['fecha'] = normalizar_fecha(fecha_linea)
             else:
-                desc_raw = resto.strip()
-        else:
-            desc_raw = linea
-            for m in reversed(montos_matches):
-                desc_raw = desc_raw[:m.start()]
-            desc_raw = desc_raw.strip()
-
-        # Extraer comprobante (número al inicio de desc_raw)
-        comprobante = ''
-        match_comprob = re.match(r'^(\d+)\s', desc_raw)
-        if match_comprob:
-            comprobante = match_comprob.group(1)
-
-        desc_limpia = re.sub(r'^\d+\s+', '', desc_raw).strip()
-
-        saldo = None
-        monto_num = None
-        es_debito = False
-
-        if len(montos_matches) >= 2:
-            saldo = limpiar_monto(montos_matches[-1].group(2))
-            monto_str = montos_matches[-2].group(2)
-            es_debito = montos_matches[-2].group(1) == '-'
-        elif len(montos_matches) == 1:
-            monto_str = montos_matches[0].group(2)
-            es_debito = montos_matches[0].group(1) == '-'
-
-        monto_num = limpiar_monto(monto_str) if monto_str else None
-
-        if monto_num is not None:
-            debito = abs(monto_num) if es_debito else None
-            credito = monto_num if not es_debito else None
-        else:
-            debito = None
-            credito = None
-
-        moneda = 'USD' if not en_seccion_pesos else 'ARS'
-
-        # Filtrar ruido: sin fecha y monto muy pequeño (< 100) o sin descripción
-        if not fecha_actual:
-            continue
-        if monto_num is not None and abs(monto_num) < 100 and not desc_limpia:
+                fecha_anticipada = fecha_linea
             continue
 
-        movimientos.append({
-            'fecha': normalizar_fecha(fecha_actual) if fecha_actual else '',
-            'descripcion': desc_limpia,
-            'referencia': comprobante,
-            'debito': debito,
-            'credito': credito,
-            'saldo': saldo,
-            'moneda': moneda,
-            'tipo': 'D' if debito else ('C' if credito else ''),
-        })
+        # ── Continuación de la descripción ──────────────────────────
+        if fila_actual is not None and resto:
+            fila_actual['descripcion'] = (fila_actual['descripcion'] + ' ' + resto).strip()
 
     return movimientos
 
