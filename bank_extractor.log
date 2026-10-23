@@ -1,0 +1,15 @@
+2026-10-14 16:10:13,779 - __main__ - INFO - ✅ Bank Extractor iniciado
+2026-10-14 16:10:13,782 - __main__ - INFO - 🚀 Flask server iniciando en puerto 5000...
+2026-10-14 16:10:13,816 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5002
+ * Running on http://172.20.148.147:5002
+2026-10-14 16:10:13,816 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2026-10-14 16:10:16,113 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:10:16] "GET / HTTP/1.1" 200 -
+2026-10-14 16:11:45,325 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "GET / HTTP/1.1" 200 -
+2026-10-14 16:11:45,484 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "GET /static/fonts.css HTTP/1.1" 200 -
+2026-10-14 16:11:45,609 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "GET /static/fonts/font7.ttf HTTP/1.1" 200 -
+2026-10-14 16:11:45,609 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "GET /static/fonts/font9.ttf HTTP/1.1" 200 -
+2026-10-14 16:11:45,619 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "GET /static/fonts/font3.ttf HTTP/1.1" 200 -
+2026-10-14 16:11:45,620 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "GET /static/fonts/font10.ttf HTTP/1.1" 200 -
+2026-10-14 16:11:45,678 - werkzeug - INFO - 127.0.0.1 - - [14/Oct/2026 16:11:45] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -

@@ -439,7 +439,7 @@ def analisis_exportar():
 if __name__ == '__main__':
     print("=" * 50)
     print("  🏦 Extractor Bancario PDF → Excel v1.0")
-    print("  Abrí http://localhost:5000 en tu navegador")
+    print("  Abrí http://localhost:5002 en tu navegador")
     print("=" * 50)
-    logger.info("🚀 Flask server iniciando en puerto 5000...")
-    app.run(debug=False, host='0.0.0.0', port=5001)
+    logger.info("🚀 Flask server iniciando en puerto 5002...")
+    app.run(debug=False, host='0.0.0.0', port=5002)
