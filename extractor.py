@@ -468,7 +468,8 @@ def extraer_santander(texto):
         r'saldo\s+total|detalle\s+impositivo|'
         r'tasas\s+de\s+acuerdos|unidad\s+de\s+informaci|condici[oó]n\s+mipyme|'
         r'fondos\s+comunes|los\s+dep[oó]sitos\s+en\s+pesos|'
-        r'salvo\s+error|^\s*\d{1,2}\s*-\s*\d{1,2}\s*$',
+        r'salvo\s+error|^\s*\d{1,2}\s*-\s*\d{1,2}\s*$|'
+        r'banco\s+santander\s+argentina\s+s\.?\s*a\.?\s+es\s+una\s+sociedad',
         re.IGNORECASE
     )
     pat_fecha = re.compile(r'^(\d{2}/\d{2}/\d{2})(?:\s+(.*))?$')

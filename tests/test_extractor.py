@@ -386,3 +386,29 @@ class TestSantander:
         assert visa['debito'] == pytest.approx(247395.79)
         assert visa['saldo'] == pytest.approx(0.0)
 
+
+TEXTO_SANTANDER_PIE = """Movimientos
+Fecha Comprobante Movimiento Débito Crédito Saldo en cuenta
+01/09/26 Saldo Inicial $ 100,00
+742 Echeq clearing recibido 48hs $ 10,00 $ 90,00
+01/09/26
+Iva 21% reg de transfisc ley27743 $ 5,00 $ 85,00
+01/09/26
+Banco Santander Argentina S.A. es una sociedad anónima según la ley argentina, sito en Av. Juan de Garay 151 CABA (C1063ABB); CUIT 30-50000845-4; I.G.J. Nro.
+correlativo 800678. Ningún accionista mayoritario de capital extranjero responde por las operaciones del Banco, en exceso de su integración accionaria (Ley 25.738);
+tampoco lo hacen otras entidades que utilicen la marca Santander.
+* Salvo error u omisión 1 - 2
+Cuenta Corriente Nº 229-004299/4 CBU: 0720229420000000429940
+Fecha Comprobante Movimiento Débito Crédito Saldo en cuenta
+01/09/26 Iva percepcion rg 2408 $ 1,00 $ 84,00
+"""
+
+
+def test_santander_pie_de_pagina_legal_no_ensucia_descripcion():
+    """El pie legal de cada página no se pega a la última fila (extracto sep-2026)"""
+    movs = extraer_santander(TEXTO_SANTANDER_PIE)
+    assert len(movs) == 3
+    assert movs[1]['descripcion'] == 'Iva 21% reg de transfisc ley27743'
+    assert not any('sociedad anónima' in m['descripcion'] for m in movs)
+    assert movs[2]['descripcion'] == 'Iva percepcion rg 2408'
+    assert movs[2]['saldo'] == pytest.approx(84.0)
