@@ -13,7 +13,7 @@ import pandas as pd
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
-from extractor import extraer_movimientos
+from extractor import extraer_movimientos, conciliar_saldos
 from extractor_seguros import extraer_resumen_seguros, exportar_excel
 from categorizador import categorizar, CATEGORIAS
 
@@ -149,6 +149,7 @@ def procesar():
             'archivo': nombre_excel,
             'total': len(resultado['movimientos']),
             'info': resultado.get('info', {}),
+            'conciliacion': conciliar_saldos(resultado['movimientos']),
             'preview': resultado['movimientos'][:10]
         })
 

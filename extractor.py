@@ -204,6 +204,54 @@ def calcular_saldos_por_cuenta(movimientos):
     return [grupos[clave] for clave in orden]
 
 
+def conciliar_saldos(movimientos):
+    """
+    Chequeo de saldos por cuenta/moneda sobre TODOS los movimientos.
+
+    Para cada grupo (misma clave que calcular_saldos_por_cuenta) devuelve:
+    saldo_inicial, creditos, debitos (positivo), saldo_calculado
+    (inicial + creditos - debitos), saldo_final (el del banco), diferencia
+    y saltos_rotos (filas donde saldo anterior + importe != saldo).
+    Si el parser no dejó saldos, verificable=False: no se puede afirmar nada.
+    Todo en centavos enteros para evitar errores de coma flotante.
+    """
+    grupos, orden = {}, []
+    for mov in movimientos:
+        clave = mov.get('cuenta') or mov.get('moneda') or ''
+        if clave not in grupos:
+            grupos[clave] = {'cuenta': mov.get('cuenta', ''), 'moneda': mov.get('moneda', ''),
+                             'movs': []}
+            orden.append(clave)
+        grupos[clave]['movs'].append(mov)
+
+    def cent(v):
+        return int(round(float(v) * 100))
+
+    resultado = []
+    for clave in orden:
+        g = grupos[clave]
+        movs = g['movs']
+        con_saldo = [m for m in movs if m.get('saldo') is not None and m.get('importe') is not None]
+        creditos = sum(cent(m['importe']) for m in movs if m.get('importe') is not None and m['importe'] > 0)
+        debitos = -sum(cent(m['importe']) for m in movs if m.get('importe') is not None and m['importe'] < 0)
+        item = {'cuenta': g['cuenta'], 'moneda': g['moneda'], 'movimientos': len(movs),
+                'creditos': creditos / 100, 'debitos': debitos / 100, 'verificable': False}
+        if con_saldo and len(con_saldo) == len(movs):
+            inicial = cent(con_saldo[0]['saldo']) - cent(con_saldo[0]['importe'])
+            final = cent(con_saldo[-1]['saldo'])
+            calculado = inicial + creditos - debitos
+            rotos, previo = 0, inicial
+            for m in con_saldo:
+                if previo + cent(m['importe']) != cent(m['saldo']):
+                    rotos += 1
+                previo = cent(m['saldo'])
+            item.update({'verificable': True, 'saldo_inicial': inicial / 100,
+                         'saldo_calculado': calculado / 100, 'saldo_final': final / 100,
+                         'diferencia': (final - calculado) / 100, 'saltos_rotos': rotos})
+        resultado.append(item)
+    return resultado
+
+
 # ─────────────────────────────────────────────
 #  DETECCIÓN DE BANCO
 # ─────────────────────────────────────────────

@@ -412,3 +412,33 @@ def test_santander_pie_de_pagina_legal_no_ensucia_descripcion():
     assert not any('sociedad anónima' in m['descripcion'] for m in movs)
     assert movs[2]['descripcion'] == 'Iva percepcion rg 2408'
     assert movs[2]['saldo'] == pytest.approx(84.0)
+
+
+from extractor import conciliar_saldos
+
+
+def _mov(importe, saldo, moneda='ARS'):
+    return {'importe': importe, 'saldo': saldo, 'moneda': moneda}
+
+
+class TestConciliarSaldos:
+    def test_cierra(self):
+        c = conciliar_saldos([_mov(-10.0, 90.0), _mov(5.5, 95.5), _mov(-0.1, 95.4)])[0]
+        assert c['verificable'] and c['saldo_inicial'] == 100.0
+        assert c['creditos'] == 5.5 and c['debitos'] == 10.1
+        assert c['saldo_calculado'] == c['saldo_final'] == 95.4
+        assert c['diferencia'] == 0 and c['saltos_rotos'] == 0
+
+    def test_no_cierra_si_falta_una_fila(self):
+        # el banco informa 65 pero 90 - 20 = 70: el saldo final no encadena
+        c = conciliar_saldos([_mov(-10.0, 90.0), _mov(-20.0, 65.0)])[0]
+        assert c['saltos_rotos'] == 1 and c['diferencia'] == -5.0
+
+    def test_sin_saldos_no_es_verificable(self):
+        c = conciliar_saldos([{'importe': 5.0, 'saldo': None, 'moneda': 'ARS'}])[0]
+        assert c['verificable'] is False and c['creditos'] == 5.0
+
+    def test_separa_por_moneda(self):
+        cs = conciliar_saldos([_mov(1.0, 11.0, 'ARS'), _mov(2.0, 7.0, 'USD')])
+        assert [c['moneda'] for c in cs] == ['ARS', 'USD']
+        assert all(c['diferencia'] == 0 for c in cs)
